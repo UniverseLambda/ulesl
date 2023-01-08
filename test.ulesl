@@ -1,0 +1,11 @@
+feature("allow_var_shadowing", "implicit_variable", "strict_typing")
+
+var its_a_var = 5
+# var its_another_var = exec()
+
+print(its_a_var)
+
+its_a_var = "MDR"
+
+exec(["pipe"], "echo", "hello")
+exec(["no_status"], "grep", "BONCHOUR")

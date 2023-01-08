@@ -1,0 +1,45 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'easy-scripting-language'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=easy-scripting-language",
+					"--package=easy-scripting-language"
+				],
+				"filter": {
+					"name": "easy-scripting-language",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in executable 'easy-scripting-language'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--bin=easy-scripting-language",
+					"--package=easy-scripting-language"
+				],
+				"filter": {
+					"name": "easy-scripting-language",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}
