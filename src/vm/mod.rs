@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::parser::{ParsedPackage, Expr, ParsedHighLevel, VarAssign, FuncCallExpr, FuncDecl, ArrayExpr};
 
-use self::{variant::VmVariant, types::VmType, error::VmError};
+use self::{variant::VmVariant, types::{VmType, VmTypable}, error::VmError};
 
 mod builtins;
 mod error;
@@ -111,7 +111,7 @@ impl Vm {
 	fn eval_expr(&mut self, expr: Expr) -> Result<VmVariant> {
 		Ok(match expr {
 			Expr::IntLiteral(v) => VmVariant::Integer(v),
-			Expr::StringLiteral(v) => VmVariant::String(v),
+			Expr::StringLiteral(v) => VmVariant::new_from_string_expr(&v)?,
 			Expr::Identifier(var_name) => self.get_variable(&var_name)?,
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
 			Expr::Array(array_data) => self.eval_array(array_data)?,
@@ -130,7 +130,7 @@ impl Vm {
 		} else {
 			let vm_value: VmVariant = value.into();
 
-			println!("[VM DEBUG] New variable: \"{}\" (value: {:?})", var_name, vm_value);
+			// println!("[VM DEBUG] New variable: \"{}\" (value: {:?})", var_name, vm_value);
 
 			scope.variables.insert(var_name, vm_value);
 
@@ -149,7 +149,7 @@ impl Vm {
 
 		let vm_value: VmVariant = value.into();
 
-		println!("[VM DEBUG] Variable update: \"{}\" (new value: {:?})", var_name, vm_value);
+		// println!("[VM DEBUG] Variable update: \"{}\" (new value: {:?})", var_name, vm_value);
 
 		if let Some(scope) = self.stack_scope.as_mut() {
 			scope
@@ -189,7 +189,7 @@ impl Vm {
 			}.functions.get(&func_name).cloned()
 		};
 
-		println!("[VM DEBUG] Trying to call {} with params {:?}", func_name, params);
+		// println!("[VM DEBUG] Trying to call {} with params {:?}", func_name, params);
 
 		if let Some(user_func) = user_func {
 			let old_scope = self.stack_scope.take();
@@ -215,5 +215,63 @@ impl Vm {
 		}
 
 		Err(VmError::FuncNameNotFound(func_name))
+	}
+
+	pub fn expect_variant_type(&self, func_name: &str, arg_name: &str, variant: &VmVariant, expected: VmType) -> Result<()> {
+		let typeinfo = variant.get_typeinfo();
+
+		if typeinfo == expected {
+			return Ok(());
+		}
+
+		return Err(VmError::InvalidArgType {
+			func_name: func_name.to_owned(),
+			arg_name: arg_name.to_owned(),
+			expected: format!("{expected:?}"),
+			got: format!("{typeinfo:?}")
+		})
+	}
+
+	pub fn expect_variant_types(&self, func_name: &str, arg_name: &str, variant: &VmVariant, expected: &[VmType]) -> Result<()> {
+		assert_ne!(expected.len(), 0);
+
+		let result = (|| {
+			let mut local_result = self.expect_variant_type(func_name, arg_name, variant, expected.first().unwrap().clone());
+
+			for e in &expected[1..] {
+				if local_result.is_ok() {
+					break;
+				}
+
+				local_result = local_result.or(self.expect_variant_type(func_name, arg_name, variant, e.clone()))
+			}
+
+			local_result
+		})();
+
+		if let Err(VmError::InvalidArgType { .. }) = result {
+			let mut expected_str = String::new();
+
+			for (idx, vt) in expected.iter().enumerate() {
+				if idx != 0 {
+					if idx == (expected.len() - 1) {
+						expected_str.push_str(" or ")
+					} else {
+						expected_str.push_str(", ")
+					}
+
+					expected_str.push_str(&format!("{vt:?}"));
+				}
+			}
+
+			return Err(VmError::InvalidArgType {
+				func_name: func_name.to_owned(),
+				arg_name: arg_name.to_owned(),
+				expected: expected_str,
+				got: format!("{:?}", variant.get_typeinfo())
+			})
+		}
+
+		Ok(())
 	}
 }
