@@ -11,6 +11,11 @@ pub struct FuncCallExpr {
 }
 
 #[derive(Debug, Clone)]
+pub struct ArrayExpr {
+	pub args: Vec<Expr>
+}
+
+#[derive(Debug, Clone)]
 pub struct VarAssign {
 	pub name: String,
 	pub val: Expr,
@@ -36,6 +41,7 @@ pub enum Expr {
 	StringLiteral(String),
 	Identifier(String),
 	FuncCall(FuncCallExpr),
+	Array(ArrayExpr),
 }
 
 #[derive(Debug, Clone)]
@@ -220,7 +226,7 @@ impl<T: Read> Parser<T> {
 			statements.push(pkg);
 		}
 
-		Ok(StatementBlock { statements: statements })
+		Ok(StatementBlock { statements })
 	}
 
 	fn parse_func_call(&mut self, func_identifier: Option<String>) -> Result<FuncCallExpr> {
@@ -238,33 +244,10 @@ impl<T: Read> Parser<T> {
 
 		self.expect_token(&parenthese_tk, TokenType::Operator, "(")?;
 
-		let mut args = Vec::new();
-
-		let mut first = true;
-
-		loop {
-			let mut tk = self.next_token()?;
-
-			if tk.token_type == TokenType::Operator && tk.content == ")" {
-				break;
-			} else {
-				if !first {
-					let comma_tk = self.next_token()?;
-
-					self.expect_token(&comma_tk, TokenType::Operator, ",")?;
-
-					tk = self.next_token()?;
-				} else {
-					first = false;
-				}
-
-				self.store_token(tk);
-
-				args.push(self.parse_expr()?);
-			}
-		}
-
-		Ok(FuncCallExpr { name: func_identifier, args: args })
+		Ok(FuncCallExpr {
+			name: func_identifier,
+			args: self.parse_list(")")?
+		})
 	}
 
 	fn parse_expr(&mut self) -> Result<Expr> {
@@ -276,6 +259,7 @@ impl<T: Read> Parser<T> {
 			TokenType::IntegerLiteral => Expr::IntLiteral(expr_start.content.parse().map_err(|e| { (expr_start.content.clone(), e) })?),
 			TokenType::StringLiteral => Expr::StringLiteral(expr_start.content),
 			TokenType::Identifier => return self.parse_branch_identifier_expr(expr_start),
+			TokenType::Operator if expr_start.content == "[" => return self.parse_array(),
 			_ => return self.unexpected_token(expr_start)
 		})
 	}
@@ -290,13 +274,47 @@ impl<T: Read> Parser<T> {
 
 		match &next_tk.token_type {
 			&TokenType::Operator if next_tk.content == "(" => return Ok(Expr::FuncCall(self.parse_func_call(Some(next_tk.content))?)),
-			&TokenType::Operator if next_tk.content == ")" || next_tk.content == "," => {
+			&TokenType::Operator if next_tk.content == ")" || next_tk.content == "," || next_tk.content == "]" => {
 				self.store_token(next_tk);
 
 				return Ok(Expr::Identifier(identifier.content));
 			},
 			_ => self.unexpected_token(next_tk),
 		}
+	}
+
+	fn parse_array(&mut self) -> Result<Expr> {
+		Ok(Expr::Array(ArrayExpr {
+			args: self.parse_list("]")?
+		}))
+	}
+
+	fn parse_list(&mut self, stop_op: &str) -> Result<Vec<Expr>> {
+		let mut args = Vec::new();
+
+		let mut first = true;
+
+		loop {
+			let mut tk = self.next_token()?;
+
+			if tk.token_type == TokenType::Operator && tk.content == stop_op {
+				break;
+			} else {
+				if !first {
+					self.expect_token(&tk, TokenType::Operator, ",")?;
+
+					tk = self.next_token()?;
+				} else {
+					first = false;
+				}
+
+				self.store_token(tk);
+
+				args.push(self.parse_expr()?);
+			}
+		}
+
+		Ok(args)
 	}
 
 	fn unexpected_token<R>(&self, tk: Token) -> Result<R> {

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::parser::{ParsedPackage, Expr, ParsedHighLevel, VarAssign, FuncCallExpr, FuncDecl};
+use crate::parser::{ParsedPackage, Expr, ParsedHighLevel, VarAssign, FuncCallExpr, FuncDecl, ArrayExpr};
 
 use self::{variant::VmVariant, types::VmType, error::VmError};
 
@@ -100,12 +100,21 @@ impl Vm {
 		Ok(())
 	}
 
+	fn eval_array(&mut self, mut array_data: ArrayExpr) -> Result<VmVariant> {
+		let elems: Vec<VmVariant> = array_data.args.drain(..).map(|e| {
+			self.eval_expr(e)
+		}).collect::<Result<Vec<VmVariant>>>()?;
+
+		Ok(VmVariant::Array(elems))
+	}
+
 	fn eval_expr(&mut self, expr: Expr) -> Result<VmVariant> {
 		Ok(match expr {
 			Expr::IntLiteral(v) => VmVariant::Integer(v),
 			Expr::StringLiteral(v) => VmVariant::String(v),
 			Expr::Identifier(var_name) => self.get_variable(&var_name)?,
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
+			Expr::Array(array_data) => self.eval_array(array_data)?,
 		})
 	}
 

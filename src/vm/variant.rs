@@ -34,6 +34,7 @@ impl From<parser::Expr> for VmVariant {
 		match value {
 			parser::Expr::IntLiteral(v) => Self::Integer(v),
 			parser::Expr::StringLiteral(v) => Self::String(v),
+			parser::Expr::Array(_) => unimplemented!(),
 			parser::Expr::Identifier(_) => unimplemented!(),
 			parser::Expr::FuncCall(_) => unimplemented!(),
 		}
@@ -50,7 +51,15 @@ impl Display for VmVariant {
 			VmVariant::Array(array) => {
 				f.write_char('[')?;
 
+				let mut first = true;
+
 				for elem in array {
+					if first {
+						first = false;
+					} else {
+						f.write_str(", ")?;
+					}
+
 					elem.fmt(f)?;
 				}
 

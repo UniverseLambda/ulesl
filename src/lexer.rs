@@ -358,7 +358,7 @@ impl<T> Lexer<T> where T: Read {
 // TODO: Lexer: probably more operators?
 fn is_operator(c: char) -> bool {
 	match c {
-		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}'
+		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}' | '[' | ']'
 		// '+' | '-' | '*' | '/'
 			// | '.'
 			// | '>' | '<' | '|' | '&'
