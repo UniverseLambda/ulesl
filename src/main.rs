@@ -1,14 +1,15 @@
 mod lexer;
+mod parser;
+mod vm;
+mod common;
+
 use lexer::Lexer;
 
 use crate::{parser::Parser, vm::Vm};
 
-mod parser;
-
-mod vm;
 
 fn main() {
-	println!("Hello, world!");
+	println!("[VM DEBUG] Hello, world!");
 
 	// let lex = Lexer::new(std::io::stdin(), "stdin".into());
 	let lex = Lexer::new(std::fs::File::open("./test.ulesl").unwrap(), "test.ulesl".into());
@@ -20,18 +21,18 @@ fn main() {
 	loop {
 		match parser.next_package() {
 			Ok(Some(p)) => {
-				println!("Parsed package: {:?}", p);
+				println!("[VM DEBUG] Parsed package: {p:?}");
 
 				if let Err(err) = vm.exec_package(p) {
-					eprintln!("Vm error: {:?}", err);
+					eprintln!("Vm error: {err:?}");
 				}
 			},
 			Ok(None) => {
-				println!("EOF reached!");
+				println!("[VM DEBUG] EOF reached!");
 				break;
 			},
 			Err(err) => {
-				println!("Parser error: {:?}", err);
+				eprintln!("{err}");
 				break;
 			}
 		}

@@ -1,6 +1,8 @@
 use std::io::Read;
 use std::io::BufReader;
 
+use crate::common::Location;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TokenType {
 	IntegerLiteral,
@@ -15,17 +17,24 @@ pub enum TokenType {
 pub struct Token {
 	pub token_type: TokenType,
 	pub content: String,
+	pub location: Location,
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
 	// Unknown,
+	#[error("Internal error")]
 	InternalError,
+	#[error("End of file")]
 	EndOfFile,
-	UnexpectedEndOfFile,
-	DecoderError,
-	InvalidCodePoint,
-	InvalidCharacter,
+	#[error("{0}: Unexpected EOF")]
+	UnexpectedEndOfFile(Location),
+	#[error("{0}: Decoder error")]
+	DecoderError(Location),
+	#[error("{0}: Invalid code point")]
+	InvalidCodePoint(Location),
+	#[error("{0}: Invalid character: {1}")]
+	InvalidCharacter(Location, char),
 }
 
 enum LexerMode {
@@ -42,17 +51,22 @@ pub struct Lexer<T: Read> {
 	reader: BufReader<T>,
 	curr_char: char,
 	buffered_char: Option<char>,
+	curr_location: Location,
+	line: usize,
+	col: usize,
 }
 
 impl<T> Lexer<T> where T: Read {
-	pub fn new(reader: T, _source: String) -> Self  {
+	pub fn new(reader: T, source: String) -> Self  {
 		let instance = Lexer {
 			// source,
 			reader: BufReader::new(reader),
 			curr_char: '\0',
 			buffered_char: None,
+			curr_location: Location::new_z(0, 0, source),
+			line: 0,
+			col: 0,
 		};
-
 
 		return instance;
 	}
@@ -66,6 +80,8 @@ impl<T> Lexer<T> where T: Read {
 			self.next_char()?;
 		}
 
+		self.curr_location = self.new_location();
+
 		let mut mode: LexerMode =
 			if self.curr_char.is_alphabetic() || self.curr_char == '_' {
 				LexerMode::Word
@@ -78,7 +94,7 @@ impl<T> Lexer<T> where T: Read {
 			} else if self.curr_char == '\n' {
 				LexerMode::LineReturn
 			} else {
-				return Err(Error::InvalidCharacter);
+				return Err(Error::InvalidCharacter(self.curr_location.clone(), self.curr_char));
 			}
 		;
 
@@ -155,7 +171,7 @@ impl<T> Lexer<T> where T: Read {
 
 		if !c.is_numeric() {
 			if c.is_alphabetic() || c == '_' {
-				return Err(Error::InvalidCharacter);
+				return Err(Error::InvalidCharacter(self.new_location(), c));
 			}
 			return Ok(true);
 		}
@@ -251,23 +267,23 @@ impl<T> Lexer<T> where T: Read {
 			_ => TokenType::Identifier
 		};
 
-		Ok(Token { content: buff.clone(), token_type: tk_type })
+		Ok(Token { content: buff.clone(), token_type: tk_type, location: self.curr_location.clone() })
 	}
 
 	fn finalize_number(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::IntegerLiteral })
+		Ok(Token { content: buff.clone(), token_type: TokenType::IntegerLiteral, location: self.curr_location.clone() })
 	}
 
 	fn finalize_string(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::StringLiteral })
+		Ok(Token { content: buff.clone(), token_type: TokenType::StringLiteral, location: self.curr_location.clone() })
 	}
 
 	fn finalize_operator(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::Operator })
+		Ok(Token { content: buff.clone(), token_type: TokenType::Operator, location: self.curr_location.clone() })
 	}
 
 	fn finalize_line_return(&mut self) -> Result<Token, Error> {
-		Ok(Token { content: "\n".into(), token_type: TokenType::LineReturn })
+		Ok(Token { content: "\n".into(), token_type: TokenType::LineReturn, location: self.curr_location.clone() })
 	}
 
 	fn next_char(&mut self) -> Result<(), Error> {
@@ -275,6 +291,8 @@ impl<T> Lexer<T> where T: Read {
 			self.curr_char = c;
 			return Ok(());
 		}
+
+		self.col += 1;
 
 		let mut buffer = [0; 1];
 
@@ -298,7 +316,7 @@ impl<T> Lexer<T> where T: Read {
 				} else if (c & 0x08) == 0 {
 					sup_byte_count = 3;
 				} else {
-					return Err(Error::DecoderError);
+					return Err(Error::DecoderError(self.new_location()));
 				}
 
 				let mut string_buf = Vec::new();
@@ -310,21 +328,30 @@ impl<T> Lexer<T> where T: Read {
 					let n = res.unwrap();
 
 					if n == 0 {
-						return Err(Error::UnexpectedEndOfFile);
+						return Err(Error::UnexpectedEndOfFile(self.new_location()));
 					}
 
 					string_buf.push(buffer[0]);
 				}
 
 				let Ok(tmp_str) = std::str::from_utf8(&string_buf) else {
-					return Err(Error::InvalidCodePoint);
+					return Err(Error::InvalidCodePoint(self.new_location()));
 				};
 
 				self.curr_char = tmp_str.chars().next().unwrap();
 			}
 
+			if self.curr_char == '\n' {
+				self.line += 1;
+				self.col = 0;
+			}
+
 			return Ok(());
 		}
+	}
+
+	fn new_location(&self) -> Location {
+		Location::new_z(self.line, self.col, self.curr_location.file().to_owned())
 	}
 }
 

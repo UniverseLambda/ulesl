@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use std::{io::Read, num::ParseIntError};
 
 use crate::lexer::{self, Lexer, Token, TokenType};
@@ -58,18 +60,16 @@ pub struct Parser<T: Read> {
 
 type Result<T> = std::result::Result<T, ParserError>;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ParserError {
-	Lexer(lexer::Error),
-	UnexpectedToken{token: Token, source: String},
+	#[error("{0}")]
+	Lexer(#[from] lexer::Error),
+	#[error("{}: unexpected token \"{}\"", .0.location, .0.content)]
+	UnexpectedToken(Token),
+	#[error("Invalid number: \"{0}\"")]
 	IntegerParsing(String, Option<ParseIntError>),
+	#[error("Unexpected End of File")]
 	UnexpectedEndOfFile,
-}
-
-impl From<lexer::Error> for ParserError {
-    fn from(value: lexer::Error) -> Self {
-		Self::Lexer(value)
-    }
 }
 
 impl From<(String, ParseIntError)> for ParserError {
@@ -290,12 +290,17 @@ impl<T: Read> Parser<T> {
 
 		match &next_tk.token_type {
 			&TokenType::Operator if next_tk.content == "(" => return Ok(Expr::FuncCall(self.parse_func_call(Some(next_tk.content))?)),
+			&TokenType::Operator if next_tk.content == ")" || next_tk.content == "," => {
+				self.store_token(next_tk);
+
+				return Ok(Expr::Identifier(identifier.content));
+			},
 			_ => self.unexpected_token(next_tk),
 		}
 	}
 
 	fn unexpected_token<R>(&self, tk: Token) -> Result<R> {
-		Err(ParserError::UnexpectedToken { token: tk, source: self.source.clone() })
+		Err(ParserError::UnexpectedToken(tk))
 	}
 
 	fn store_token(&mut self, tk: Token) {
