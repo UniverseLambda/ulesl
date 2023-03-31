@@ -1,9 +1,9 @@
-feature("allow_var_shadowing", "implicit_variable", "strict_typing")
+# feature("allow_var_shadowing", "implicit_variable")
 
-var its_a_var = 5
+let its_a_var = 5
 # var its_another_var = exec()
 
-print(its_a_var)
+println(its_a_var)
 
 its_a_var = "MDR"
 

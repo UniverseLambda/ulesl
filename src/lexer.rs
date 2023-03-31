@@ -5,7 +5,7 @@ use std::io::BufReader;
 pub enum TokenType {
 	IntegerLiteral,
 	StringLiteral,
-	// Keyword,
+	Keyword,
 	Identifier,
 	Operator,
 	LineReturn,
@@ -245,7 +245,13 @@ impl<T> Lexer<T> where T: Read {
 	}
 
 	fn finalize_word(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::Identifier })
+		let tk_type = match buff.as_str() {
+			"let" => TokenType::Keyword,
+			"fn" => TokenType::Keyword,
+			_ => TokenType::Identifier
+		};
+
+		Ok(Token { content: buff.clone(), token_type: tk_type })
 	}
 
 	fn finalize_number(&mut self, buff: &mut String) -> Result<Token, Error> {
@@ -325,9 +331,9 @@ impl<T> Lexer<T> where T: Read {
 // TODO: Lexer: probably more operators?
 fn is_operator(c: char) -> bool {
 	match c {
-		'=' | '(' | ')' | ';' | '#'
+		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}'
 		// '+' | '-' | '*' | '/'
-			// | ',' | '.'
+			// | '.'
 			// | '>' | '<' | '|' | '&'
 			// | '?' | ':'
 			// | ';' | '(' | ')' | '[' | ']' | '{' | '}'

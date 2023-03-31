@@ -1,37 +1,34 @@
-/**
- * This file is part of EasyScriptingLanguage.
- *
- * EasyScriptingLanguage is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * EasyScriptingLanguage is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with EasyScriptingLanguage.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 use std::{io::Read, num::ParseIntError};
 
 use crate::lexer::{self, Lexer, Token, TokenType};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncCallExpr {
 	pub name: String,
 	pub args: Vec<Expr>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VarAssign {
 	pub name: String,
 	pub val: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct FuncDecl {
+	pub name: String,
+	pub args: Vec<String>,
+	// pub ret_type: VmType,
+	pub block: StatementBlock,
+}
+
+#[derive(Debug, Clone)]
+pub struct StatementBlock {
+	pub statements: Vec<ParsedPackage>,
+	// pub ret_type: VmType,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
 	IntLiteral(i64),
 	StringLiteral(String),
@@ -39,14 +36,15 @@ pub enum Expr {
 	FuncCall(FuncCallExpr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParsedHighLevel {
 	VarDecl(VarAssign),
 	VarSet(VarAssign),
+	FuncDecl(FuncDecl),
 	FuncCall(FuncCallExpr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParsedPackage {
 	pub source: String,
 	pub parsed: ParsedHighLevel,
@@ -65,6 +63,7 @@ pub enum ParserError {
 	Lexer(lexer::Error),
 	UnexpectedToken{token: Token, source: String},
 	IntegerParsing(String, Option<ParseIntError>),
+	UnexpectedEndOfFile,
 }
 
 impl From<lexer::Error> for ParserError {
@@ -85,19 +84,28 @@ impl<T: Read> Parser<T> {
 	}
 
 	pub fn next_package(&mut self) -> Result<Option<ParsedPackage>> {
-		let init_token = match self.next_token() {
-			Ok(v) => v,
-			Err(lexer::Error::EndOfFile) => return Ok(None),
-			Err(err) => return Err(err.into())
+		let init_token = {
+			loop {
+				match self.next_token() {
+					Ok(v) if v.token_type == TokenType::LineReturn => continue,
+					Ok(v) => break v,
+					Err(lexer::Error::EndOfFile) => return Ok(None),
+					Err(err) => return Err(err.into())
+				};
+			}
 		};
 
-		match init_token.token_type {
-			TokenType::Identifier => (),
-			_ => return self.unexpected_token(init_token)
-		}
+		let tktype_ident = self.expect_token_type(&init_token, TokenType::Identifier);
+		let tktype_keyword = self.expect_token_type(&init_token, TokenType::Keyword);
 
-		let high_level = if init_token.content == "var" {
-			ParsedHighLevel::VarDecl(self.parse_var_assign(None)?)
+		tktype_ident.or(tktype_keyword)?;
+
+		let high_level = if let TokenType::Keyword = init_token.token_type {
+			match init_token.content.as_str() {
+				"let" => ParsedHighLevel::VarDecl(self.parse_var_assign(None)?),
+				"fn" =>  ParsedHighLevel::FuncDecl(self.parse_func_decl()?),
+				_ => return self.unexpected_token(init_token)
+			}
 		} else {
 			let discr_tk = self.next_token()?;
 
@@ -131,13 +139,7 @@ impl<T: Read> Parser<T> {
 		} else {
 			let name_tk = self.next_token()?;
 
-			let TokenType::Identifier = name_tk.token_type else {
-				return self.unexpected_token(name_tk);
-			};
-
-			if name_tk.content == "var" {
-				return self.unexpected_token(name_tk);
-			}
+			self.expect_token_type(&name_tk, TokenType::Identifier)?;
 
 			name_tk.content
 		};
@@ -151,14 +153,124 @@ impl<T: Read> Parser<T> {
 		Ok(VarAssign { name: name, val: val })
 	}
 
+	fn parse_func_decl(&mut self) -> Result<FuncDecl> {
+		let func_ident = {
+			let func_identifier_tk = self.next_token()?;
+
+			self.expect_token_type(&func_identifier_tk, TokenType::Identifier)?;
+
+			func_identifier_tk.content
+		};
+
+		{
+			let tk = self.next_token()?;
+			self.expect_token_content(&tk, "(")?;
+		}
+
+		let mut args: Vec<String> = Vec::new();
+
+		let mut first_arg_token: bool = true;
+		let mut next_token;
+
+		loop {
+			next_token = self.next_token()?;
+
+			if next_token.content == ")" {
+				break;
+			}
+
+			if !first_arg_token {
+				self.expect_token_content(&next_token, ",")?;
+				first_arg_token = false;
+
+				next_token = self.next_token()?;
+			}
+
+			self.expect_token_type(&next_token, TokenType::Identifier)?;
+
+			args.push(next_token.content);
+		}
+
+		let block = self.parse_statement_block()?;
+
+		Ok(FuncDecl { name: func_ident, args: args, block: block })
+	}
+
+	fn parse_statement_block(&mut self) -> Result<StatementBlock> {
+		{
+			let tk = self.next_token()?;
+			self.expect_token_content(&tk, "{")?;
+		}
+
+		let mut statements = Vec::new();
+
+		loop {
+			let next_tk = self.next_token()?;
+
+			if next_tk.content == "}" {
+				break;
+			}
+
+			self.store_token(next_tk);
+
+			let Some(pkg) = self.next_package()? else {
+				return Err(ParserError::UnexpectedEndOfFile);
+			};
+
+			statements.push(pkg);
+		}
+
+		Ok(StatementBlock { statements: statements })
+	}
+
 	fn parse_func_call(&mut self, func_identifier: Option<String>) -> Result<FuncCallExpr> {
-		todo!()
+		let func_identifier = if let Some(func_identifier) = func_identifier {
+			func_identifier
+		} else {
+			let func_identifier_tk = self.next_token()?;
+
+			self.expect_token_type(&func_identifier_tk, TokenType::Identifier)?;
+
+			func_identifier_tk.content
+		};
+
+		let parenthese_tk = self.next_token()?;
+
+		self.expect_token(&parenthese_tk, TokenType::Operator, "(")?;
+
+		let mut args = Vec::new();
+
+		let mut first = true;
+
+		loop {
+			let mut tk = self.next_token()?;
+
+			if tk.token_type == TokenType::Operator && tk.content == ")" {
+				break;
+			} else {
+				if !first {
+					let comma_tk = self.next_token()?;
+
+					self.expect_token(&comma_tk, TokenType::Operator, ",")?;
+
+					tk = self.next_token()?;
+				} else {
+					first = false;
+				}
+
+				self.store_token(tk);
+
+				args.push(self.parse_expr()?);
+			}
+		}
+
+		Ok(FuncCallExpr { name: func_identifier, args: args })
 	}
 
 	fn parse_expr(&mut self) -> Result<Expr> {
 		let expr_start = self.next_token()?;
 
-		// TODO: extended expressions (func, calculs, etc...)
+		// TODO: extended expressions (calculs, etc...)
 
 		Ok(match expr_start.token_type {
 			TokenType::IntegerLiteral => Expr::IntLiteral(expr_start.content.parse().map_err(|e| { (expr_start.content.clone(), e) })?),
