@@ -9,3 +9,5 @@ its_a_var = "MDR"
 
 exec(["pipe"], "echo", "hello")
 exec(["no_status"], "grep", "BONCHOUR")
+
+println("Hahahaha")
