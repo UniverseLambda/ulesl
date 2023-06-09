@@ -1,8 +1,14 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::parser::{ParsedPackage, Expr, ParsedHighLevel, VarAssign, FuncCallExpr, FuncDecl, ArrayExpr};
+use crate::parser::{
+	ArrayExpr, Expr, FuncCallExpr, FuncDecl, ParsedHighLevel, ParsedPackage, VarAssign,
+};
 
-use self::{variant::VmVariant, types::{VmType, VmTypable}, error::VmError};
+use self::{
+	error::VmError,
+	types::{VmTypable, VmType},
+	variant::VmVariant,
+};
 
 mod builtins;
 mod error;
@@ -11,12 +17,13 @@ mod variant;
 
 use error::Result;
 
-type Builtin = fn (&mut Vm, String, Vec<VmVariant>) -> Result<VmVariant>;
+type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> Result<VmVariant>;
 
-type VmFuncVarAssign<T: Into<VmVariant> = VmVariant> = fn (&mut Vm, String, T) -> Result<()>;
+type VmFuncVarAssign<T: Into<VmVariant> = VmVariant> = fn(&mut Vm, String, T) -> Result<()>;
 
 struct FunctionData {
 	packages: Vec<ParsedPackage>,
+	args: Vec<String>,
 	return_type: VmType,
 }
 
@@ -57,10 +64,22 @@ impl Vm {
 		// let source: String = package.source;
 
 		let ret = match package.parsed {
-			ParsedHighLevel::VarDecl(assign_data) => self.eval_var_assign(assign_data, Self::new_variable).map(|_| Option::None)?,
-			ParsedHighLevel::VarSet(assign_data) => self.eval_var_assign(assign_data, Self::set_variable).map(|_| Option::None)?,
-			ParsedHighLevel::FuncCall(call_data) => self.eval_func_call(call_data).map(|v| if let None = self.stack_scope { Option::Some(v) } else { Option::None } )?,
-			ParsedHighLevel::FuncDecl(func_decl) => self.eval_func_decl(func_decl).map(|_| Option::None)?,
+			ParsedHighLevel::VarDecl(assign_data) => self
+				.eval_var_assign(assign_data, Self::new_variable)
+				.map(|_| Option::None)?,
+			ParsedHighLevel::VarSet(assign_data) => self
+				.eval_var_assign(assign_data, Self::set_variable)
+				.map(|_| Option::None)?,
+			ParsedHighLevel::FuncCall(call_data) => self.eval_func_call(call_data).map(|v| {
+				if let None = self.stack_scope {
+					Option::Some(v)
+				} else {
+					Option::None
+				}
+			})?,
+			ParsedHighLevel::FuncDecl(func_decl) => {
+				self.eval_func_decl(func_decl).map(|_| Option::None)?
+			}
 		};
 
 		Ok(ret)
@@ -101,9 +120,11 @@ impl Vm {
 	}
 
 	fn eval_array(&mut self, mut array_data: ArrayExpr) -> Result<VmVariant> {
-		let elems: Vec<VmVariant> = array_data.args.drain(..).map(|e| {
-			self.eval_expr(e)
-		}).collect::<Result<Vec<VmVariant>>>()?;
+		let elems: Vec<VmVariant> = array_data
+			.args
+			.drain(..)
+			.map(|e| self.eval_expr(e))
+			.collect::<Result<Vec<VmVariant>>>()?;
 
 		Ok(VmVariant::Array(elems))
 	}
@@ -140,9 +161,12 @@ impl Vm {
 
 	pub fn set_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> Result<()> {
 		if !self.allow_implicit_var {
-			if self.stack_scope.as_ref().map_or(
-				false, |scope| scope.variables.contains_key(&var_name))
-				&& !self.global_scope.variables.contains_key(&var_name) {
+			if self
+				.stack_scope
+				.as_ref()
+				.map_or(false, |scope| scope.variables.contains_key(&var_name))
+				&& !self.global_scope.variables.contains_key(&var_name)
+			{
 				return Err(VmError::VarNameNotFound(var_name));
 			}
 		}
@@ -155,7 +179,9 @@ impl Vm {
 			scope
 		} else {
 			&mut self.global_scope
-		}.variables.insert(var_name, vm_value);
+		}
+		.variables
+		.insert(var_name, vm_value);
 
 		Ok(())
 	}
@@ -176,7 +202,11 @@ impl Vm {
 		}
 	}
 
-	pub fn call_func(&mut self, func_name: String, params: Vec<VmVariant>) -> Result<VmVariant> {
+	pub fn call_func(
+		&mut self,
+		func_name: String,
+		mut params: Vec<VmVariant>,
+	) -> Result<VmVariant> {
 		if let Some(builtin_func) = self.builtins.get(&func_name) {
 			return builtin_func(self, func_name, params);
 		}
@@ -186,7 +216,10 @@ impl Vm {
 				scope
 			} else {
 				&self.global_scope
-			}.functions.get(&func_name).cloned()
+			}
+			.functions
+			.get(&func_name)
+			.cloned()
 		};
 
 		// println!("[VM DEBUG] Trying to call {} with params {:?}", func_name, params);
@@ -196,16 +229,50 @@ impl Vm {
 
 			self.stack_scope = Some(Scope::new());
 
+			// TODO: Parameters
+
+			if params.len() < user_func.args.len() {
+				return Err(VmError::NotEnoughArg {
+					func_name,
+					expected: user_func.args.len(),
+					got: params.len(),
+				});
+			} else if params.len() > user_func.args.len() {
+				return Err(VmError::TooMuchArgs {
+					func_name,
+					expected: user_func.args.len(),
+					got: params.len(),
+				});
+			}
+
+			let zipped = user_func.args.iter().zip(params.drain(..));
+
+			for (name, value) in zipped {
+				self.stack_scope
+					.as_mut()
+					.unwrap()
+					.variables
+					.insert(name.clone(), value);
+			}
+
+			// zipped.unzip() when I'll implement default values
+
 			let mut res: Result<VmVariant> = Ok(VmVariant::Unit);
 
 			for package in &user_func.packages {
 				match self.exec_package(package.clone()) {
-					Ok(Some(v)) => { res = Ok(v); break; },
-					Err(err) => { res = Err(err); break; },
+					Ok(Some(v)) => {
+						res = Ok(v);
+						break;
+					}
+					Err(err) => {
+						res = Err(err);
+						break;
+					}
 
 					Ok(None) => (),
 				};
-			};
+			}
 
 			// TODO: Properly clean previous stack scope (when type cleanup is implemented, of course)
 
@@ -217,7 +284,13 @@ impl Vm {
 		Err(VmError::FuncNameNotFound(func_name))
 	}
 
-	pub fn expect_variant_type(&self, func_name: &str, arg_name: &str, variant: &VmVariant, expected: VmType) -> Result<()> {
+	pub fn expect_variant_type(
+		&self,
+		func_name: &str,
+		arg_name: &str,
+		variant: &VmVariant,
+		expected: VmType,
+	) -> Result<()> {
 		let typeinfo = variant.get_typeinfo();
 
 		if typeinfo == expected {
@@ -228,22 +301,38 @@ impl Vm {
 			func_name: func_name.to_owned(),
 			arg_name: arg_name.to_owned(),
 			expected: format!("{expected:?}"),
-			got: format!("{typeinfo:?}")
-		})
+			got: format!("{typeinfo:?}"),
+		});
 	}
 
-	pub fn expect_variant_types(&self, func_name: &str, arg_name: &str, variant: &VmVariant, expected: &[VmType]) -> Result<()> {
+	pub fn expect_variant_types(
+		&self,
+		func_name: &str,
+		arg_name: &str,
+		variant: &VmVariant,
+		expected: &[VmType],
+	) -> Result<()> {
 		assert_ne!(expected.len(), 0);
 
 		let result = (|| {
-			let mut local_result = self.expect_variant_type(func_name, arg_name, variant, expected.first().unwrap().clone());
+			let mut local_result = self.expect_variant_type(
+				func_name,
+				arg_name,
+				variant,
+				expected.first().unwrap().clone(),
+			);
 
 			for e in &expected[1..] {
 				if local_result.is_ok() {
 					break;
 				}
 
-				local_result = local_result.or(self.expect_variant_type(func_name, arg_name, variant, e.clone()))
+				local_result = local_result.or(self.expect_variant_type(
+					func_name,
+					arg_name,
+					variant,
+					e.clone(),
+				))
 			}
 
 			local_result
@@ -268,8 +357,8 @@ impl Vm {
 				func_name: func_name.to_owned(),
 				arg_name: arg_name.to_owned(),
 				expected: expected_str,
-				got: format!("{:?}", variant.get_typeinfo())
-			})
+				got: format!("{:?}", variant.get_typeinfo()),
+			});
 		}
 
 		Ok(())

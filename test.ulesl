@@ -7,7 +7,21 @@ println(its_a_var)
 
 its_a_var = "MDR"
 
-exec(["pipe"], "echo", "hello")
-exec(["no_status"], "grep", "BONCHOUR")
+fn my_func() {
+	println("Okayyyy")
+}
+
+fn my_func_with_param(param) {
+	println("param:", param)
+}
+
+# exec(["pipe"], "echo", "hello")
+# exec(["no_status"], "grep", "BONCHOUR")
 
 println("Hahahaha")
+
+my_func()
+my_func()
+println("Nope")
+my_func()
+my_func_with_param(its_a_var)

@@ -20,6 +20,13 @@ pub enum VmType {
 
 impl From<FuncDecl> for (String, FunctionData) {
 	fn from(value: FuncDecl) -> Self {
-		(value.name, FunctionData { packages: value.block.statements, return_type: VmType::Vary })
+		(
+			value.name,
+			FunctionData {
+				args: value.args,
+				packages: value.block.statements,
+				return_type: VmType::Vary,
+			},
+		)
 	}
 }
