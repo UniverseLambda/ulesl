@@ -1,8 +1,8 @@
+mod common;
 mod lexer;
 mod parser;
 mod vm;
-mod common;
-use std::io::Read;
+use std::io::{IsTerminal, Read, Write};
 
 use lexer::Lexer;
 
@@ -17,12 +17,20 @@ fn main() {
 		eprintln!("ulesl: Too many arguments");
 	}
 
-	let (reader, file): (Box<dyn Read>, String) =
-	if args.is_empty() || args[0] == "-" {
-		(Box::new(std::io::stdin()), "stdin".into())
-	} else {
-		(Box::new(std::fs::File::open(&args[0]).expect("ulesl: Could not open input file")), args.pop().unwrap())
-	};
+	let (reader, file, interactive): (Box<dyn Read>, String, bool) =
+		if args.is_empty() || args[0] == "-" {
+			(
+				Box::new(std::io::stdin()),
+				"stdin".into(),
+				std::io::stdin().is_terminal(),
+			)
+		} else {
+			(
+				Box::new(std::fs::File::open(&args[0]).expect("ulesl: Could not open input file")),
+				args.pop().unwrap(),
+				false,
+			)
+		};
 
 	let lex = Lexer::new(reader, file);
 	let mut parser = Parser::new(lex, "test.ulesl".into());
@@ -31,6 +39,11 @@ fn main() {
 	vm.register_default_builtins();
 
 	loop {
+		if interactive {
+			print!("ulesl> ");
+			let _ = std::io::stdout().flush();
+		}
+
 		match parser.next_package() {
 			Ok(Some(p)) => {
 				// println!("[VM DEBUG] Parsed package: {p:?}");
@@ -38,14 +51,16 @@ fn main() {
 				if let Err(err) = vm.exec_package(p) {
 					eprintln!("Vm error: {err:?}");
 				}
-			},
+			}
 			Ok(None) => {
 				// println!("[VM DEBUG] EOF reached!");
 				break;
-			},
+			}
 			Err(err) => {
 				eprintln!("{err}");
-				break;
+				if !interactive {
+					break;
+				}
 			}
 		}
 	}
