@@ -1,4 +1,13 @@
-use super::*;
+use std::io::Read;
+
+pub mod legacy;
+
+pub use legacy::{
+	ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
+	ParserError, Result, StatementBlock, VarAssign,
+};
+
+use crate::lexer::{self, Lexer, Token, TokenType};
 
 pub struct Parser<T: Read> {
 	lexer: Lexer<T>,
@@ -120,7 +129,7 @@ impl<T: Read> Parser<T> {
 		Ok(FuncDecl {
 			name: func_identifier.content,
 			args: arg_list,
-			block: block,
+			block,
 		})
 	}
 

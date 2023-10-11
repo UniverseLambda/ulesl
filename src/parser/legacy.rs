@@ -4,8 +4,6 @@ use std::{io::Read, num::ParseIntError};
 
 use crate::lexer::{self, Lexer, Token, TokenType};
 
-pub mod ng;
-
 #[derive(Debug, Clone)]
 pub struct IfStatement {
 	pub val: Expr,
@@ -93,7 +91,7 @@ pub struct Parser<T: Read> {
 	stored_token: Option<Token>,
 }
 
-type Result<T> = std::result::Result<T, ParserError>;
+pub type Result<T> = std::result::Result<T, ParserError>;
 
 #[derive(Error, Debug)]
 pub enum ParserError {
@@ -124,13 +122,10 @@ impl<T: Read> Parser<T> {
 
 	pub fn next_package(&mut self) -> Result<Option<ParsedPackage>> {
 		let init_token = {
-			loop {
-				match self.next_token() {
-					Ok(v) if v.token_type == TokenType::LineReturn => continue,
-					Ok(v) => break v,
-					Err(lexer::Error::EndOfFile) => return Ok(None),
-					Err(err) => return Err(err.into()),
-				};
+			match self.next_token() {
+				Ok(v) => v,
+				Err(lexer::Error::EndOfFile) => return Ok(None),
+				Err(err) => return Err(err.into()),
 			}
 		};
 
@@ -193,10 +188,7 @@ impl<T: Read> Parser<T> {
 
 		let val = self.parse_expr()?;
 
-		Ok(VarAssign {
-			name: name,
-			val: val,
-		})
+		Ok(VarAssign { name, val })
 	}
 
 	fn parse_func_decl(&mut self) -> Result<FuncDecl> {
@@ -241,8 +233,8 @@ impl<T: Read> Parser<T> {
 
 		Ok(FuncDecl {
 			name: func_ident,
-			args: args,
-			block: block,
+			args,
+			block,
 		})
 	}
 
@@ -333,16 +325,16 @@ impl<T: Read> Parser<T> {
 			(false, None) => panic!("Unexpected is_end_of_package result: (false, None)"),
 		};
 
-		match &next_tk.token_type {
-			&TokenType::Operator if next_tk.content == "(" => {
-				return Ok(Expr::FuncCall(self.parse_func_call(Some(next_tk.content))?))
+		match next_tk.token_type {
+			TokenType::Operator if next_tk.content == "(" => {
+				Ok(Expr::FuncCall(self.parse_func_call(Some(next_tk.content))?))
 			}
-			&TokenType::Operator
+			TokenType::Operator
 				if next_tk.content == ")" || next_tk.content == "," || next_tk.content == "]" =>
 			{
 				self.store_token(next_tk);
 
-				return Ok(Expr::Identifier(identifier.content));
+				Ok(Expr::Identifier(identifier.content))
 			}
 			_ => self.unexpected_token(next_tk),
 		}
@@ -432,10 +424,6 @@ impl<T: Read> Parser<T> {
 
 		match tk {
 			Token {
-				token_type: TokenType::LineReturn,
-				..
-			} => Ok((true, Some(tk))),
-			Token {
 				token_type: TokenType::Operator,
 				..
 			} if tk.content == ";" => Ok((true, Some(tk))),
@@ -451,10 +439,6 @@ impl<T: Read> Parser<T> {
 		};
 
 		match tk {
-			Token {
-				token_type: TokenType::LineReturn,
-				..
-			} => Ok(()),
 			Token {
 				token_type: TokenType::Operator,
 				..

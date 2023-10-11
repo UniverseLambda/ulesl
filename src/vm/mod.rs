@@ -71,7 +71,7 @@ impl Vm {
 				.eval_var_assign(assign_data, Self::set_variable)
 				.map(|_| Option::None)?,
 			ParsedHighLevel::FuncCall(call_data) => self.eval_func_call(call_data).map(|v| {
-				if let None = self.stack_scope {
+				if self.stack_scope.is_none() {
 					Option::Some(v)
 				} else {
 					Option::None
@@ -126,7 +126,10 @@ impl Vm {
 		let cond_variant = self.eval_expr(if_statement.val)?;
 
 		let VmVariant::Bool(cond) = cond_variant else {
-			return Err(VmError::InvalidValueType { expected: VmType::Bool.to_string(), got: cond_variant.get_typeinfo().to_string() });
+			return Err(VmError::InvalidValueType {
+				expected: VmType::Bool.to_string(),
+				got: cond_variant.get_typeinfo().to_string(),
+			});
 		};
 
 		if cond {
@@ -186,15 +189,14 @@ impl Vm {
 	}
 
 	pub fn set_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> Result<()> {
-		if !self.allow_implicit_var {
-			if self
+		if !self.allow_implicit_var
+			&& self
 				.stack_scope
 				.as_ref()
 				.map_or(false, |scope| scope.variables.contains_key(&var_name))
-				&& !self.global_scope.variables.contains_key(&var_name)
-			{
-				return Err(VmError::VarNameNotFound(var_name));
-			}
+			&& !self.global_scope.variables.contains_key(&var_name)
+		{
+			return Err(VmError::VarNameNotFound(var_name));
 		}
 
 		let vm_value: VmVariant = value.into();
@@ -257,19 +259,23 @@ impl Vm {
 
 			// TODO: Parameters
 
-			if params.len() < user_func.args.len() {
-				return Err(VmError::NotEnoughArg {
-					func_name,
-					expected: user_func.args.len(),
-					got: params.len(),
-				});
-			} else if params.len() > user_func.args.len() {
-				return Err(VmError::TooMuchArgs {
-					func_name,
-					expected: user_func.args.len(),
-					got: params.len(),
-				});
-			}
+			match params.len().cmp(&user_func.args.len()) {
+				std::cmp::Ordering::Less => {
+					return Err(VmError::NotEnoughArg {
+						func_name,
+						expected: user_func.args.len(),
+						got: params.len(),
+					});
+				}
+				std::cmp::Ordering::Equal => (),
+				std::cmp::Ordering::Greater => {
+					return Err(VmError::TooMuchArgs {
+						func_name,
+						expected: user_func.args.len(),
+						got: params.len(),
+					})
+				}
+			};
 
 			let zipped = user_func.args.iter().zip(params.drain(..));
 
@@ -323,12 +329,12 @@ impl Vm {
 			return Ok(());
 		}
 
-		return Err(VmError::InvalidArgType {
+		Err(VmError::InvalidArgType {
 			func_name: func_name.to_owned(),
 			arg_name: arg_name.to_owned(),
 			expected: format!("{expected:?}"),
 			got: format!("{typeinfo:?}"),
-		});
+		})
 	}
 
 	pub fn expect_variant_types(
@@ -340,7 +346,7 @@ impl Vm {
 	) -> Result<()> {
 		assert_ne!(expected.len(), 0);
 
-		let result = (|| {
+		let result = {
 			let mut local_result = self.expect_arg_variant_type(
 				func_name,
 				arg_name,
@@ -362,7 +368,7 @@ impl Vm {
 			}
 
 			local_result
-		})();
+		};
 
 		if let Err(VmError::InvalidArgType { .. }) = result {
 			let mut expected_str = String::new();

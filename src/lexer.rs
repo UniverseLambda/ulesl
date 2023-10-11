@@ -11,7 +11,6 @@ pub enum TokenType {
 	Identifier,
 	SpecialInstruction,
 	Operator,
-	LineReturn,
 }
 
 #[derive(Clone, Debug)]
@@ -25,13 +24,13 @@ pub struct Token {
 pub enum Error {
 	// Unknown,
 	#[error("Internal error")]
-	InternalError,
+	Internal,
 	#[error("End of file")]
 	EndOfFile,
 	#[error("{0}: Unexpected EOF")]
 	UnexpectedEndOfFile(Location),
 	#[error("{0}: Decoder error")]
-	DecoderError(Location),
+	Decoder(Location),
 	#[error("{0}: Invalid code point")]
 	InvalidCodePoint(Location),
 	#[error("{0}: Invalid character: {1:?}")]
@@ -46,7 +45,6 @@ enum LexerMode {
 	Number,
 	String(bool, bool, bool),
 	Operator,
-	LineReturn,
 }
 
 pub struct Lexer<T: Read> {
@@ -64,7 +62,7 @@ where
 	T: Read,
 {
 	pub fn new(reader: T, source: String) -> Self {
-		let instance = Lexer {
+		Lexer {
 			// source,
 			reader: BufReader::new(reader),
 			curr_char: '\0',
@@ -72,9 +70,7 @@ where
 			curr_location: Location::new_z(0, 0, source),
 			line: 0,
 			col: 0,
-		};
-
-		return instance;
+		}
 	}
 
 	pub fn next_token(&mut self) -> Result<Token, Error> {
@@ -82,9 +78,7 @@ where
 
 		self.next_char()?;
 
-		while self.curr_char.is_whitespace()
-		/* && self.curr_char != '\n' */
-		{
+		while self.curr_char.is_whitespace() {
 			self.next_char()?;
 		}
 
@@ -99,8 +93,6 @@ where
 				LexerMode::String(true, false, false)
 			} else if is_operator(self.curr_char) {
 				LexerMode::Operator
-			// } else if self.curr_char == '\n' {
-			// 	LexerMode::LineReturn
 			} else {
 				return Err(Error::InvalidCharacter(
 					self.curr_location.clone(),
@@ -116,7 +108,6 @@ where
 				LexerMode::Number => self.handle_number(&mut buff),
 				LexerMode::String(_, _, _) => self.handle_string(&mut buff, &mut mode),
 				LexerMode::Operator => self.handle_operator(&mut buff, &mut mode),
-				LexerMode::LineReturn => self.handle_line_return(),
 			};
 
 			if let Result::Ok(complete) = res {
@@ -138,11 +129,10 @@ where
 		}
 
 		let res = match mode {
-			LexerMode::Word => self.finalize_word(&mut buff),
-			LexerMode::Number => self.finalize_number(&mut buff),
-			LexerMode::String(_, _, _) => self.finalize_string(&mut buff),
-			LexerMode::Operator => self.finalize_operator(&mut buff),
-			LexerMode::LineReturn => self.finalize_line_return(),
+			LexerMode::Word => self.finalize_word(&buff),
+			LexerMode::Number => self.finalize_number(&buff),
+			LexerMode::String(_, _, _) => self.finalize_string(&buff),
+			LexerMode::Operator => self.finalize_operator(&buff),
 		};
 
 		if !no_next_char {
@@ -166,13 +156,13 @@ where
 	fn handle_word(&mut self, buff: &mut String) -> Result<bool, Error> {
 		let c = self.curr_char;
 
-		if buff.len() > 0 && !c.is_alphanumeric() && c != '_' {
+		if !buff.is_empty() && !c.is_alphanumeric() && c != '_' {
 			return Ok(true);
 		}
 
 		buff.push(self.curr_char);
 
-		return Ok(false);
+		Ok(false)
 	}
 
 	// TODO: handle different base (ie: other than base 10)
@@ -217,7 +207,7 @@ where
 				Ok(false)
 			}
 		} else {
-			Err(Error::InternalError)
+			Err(Error::Internal)
 		}
 	}
 
@@ -258,10 +248,7 @@ where
 			};
 		}
 
-		if (buff.starts_with('<') && c == '=')
-			|| (buff.starts_with('>') && c == '=')
-			|| (buff.starts_with('/') && c == '*')
-		{
+		if (buff.starts_with('>') || buff.starts_with('<')) && c == '=' {
 			buff.push(c);
 			return Ok(false);
 		}
@@ -269,12 +256,8 @@ where
 		Ok(true)
 	}
 
-	fn handle_line_return(&mut self) -> Result<bool, Error> {
-		return Ok(true);
-	}
-
-	fn finalize_word(&mut self, buff: &mut String) -> Result<Token, Error> {
-		let tk_type = match buff.as_str() {
+	fn finalize_word(&mut self, buff: &str) -> Result<Token, Error> {
+		let tk_type = match buff {
 			"let" => TokenType::Keyword,
 			"fn" => TokenType::Keyword,
 			"if" => TokenType::Keyword,
@@ -292,40 +275,32 @@ where
 		};
 
 		Ok(Token {
-			content: buff.clone(),
+			content: buff.to_owned(),
 			token_type: tk_type,
 			location: self.curr_location.clone(),
 		})
 	}
 
-	fn finalize_number(&mut self, buff: &mut String) -> Result<Token, Error> {
+	fn finalize_number(&mut self, buff: &str) -> Result<Token, Error> {
 		Ok(Token {
-			content: buff.clone(),
+			content: buff.to_owned(),
 			token_type: TokenType::IntegerLiteral,
 			location: self.curr_location.clone(),
 		})
 	}
 
-	fn finalize_string(&mut self, buff: &mut String) -> Result<Token, Error> {
+	fn finalize_string(&mut self, buff: &str) -> Result<Token, Error> {
 		Ok(Token {
-			content: buff.clone(),
+			content: buff.to_owned(),
 			token_type: TokenType::StringLiteral,
 			location: self.curr_location.clone(),
 		})
 	}
 
-	fn finalize_operator(&mut self, buff: &mut String) -> Result<Token, Error> {
+	fn finalize_operator(&mut self, buff: &str) -> Result<Token, Error> {
 		Ok(Token {
-			content: buff.clone(),
+			content: buff.to_owned(),
 			token_type: TokenType::Operator,
-			location: self.curr_location.clone(),
-		})
-	}
-
-	fn finalize_line_return(&mut self) -> Result<Token, Error> {
-		Ok(Token {
-			content: "\n".into(),
-			token_type: TokenType::LineReturn,
 			location: self.curr_location.clone(),
 		})
 	}
@@ -344,7 +319,7 @@ where
 		let n = res.unwrap();
 
 		if n == 0 {
-			return Err(Error::EndOfFile);
+			Err(Error::EndOfFile)
 		} else {
 			let c = buffer[0];
 
@@ -360,7 +335,7 @@ where
 				} else if (c & 0x08) == 0 {
 					sup_byte_count = 3;
 				} else {
-					return Err(Error::DecoderError(self.new_location()));
+					return Err(Error::Decoder(self.new_location()));
 				}
 
 				let mut string_buf = Vec::new();
@@ -390,7 +365,7 @@ where
 				self.col = 0;
 			}
 
-			return Ok(());
+			Ok(())
 		}
 	}
 

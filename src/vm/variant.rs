@@ -63,9 +63,9 @@ impl VmVariant {
 		Ok(Self::String(res_str))
 	}
 
-	pub fn unwrap_unit(self) -> () {
+	pub fn unwrap_unit(self) {
 		if let VmVariant::Unit = self {
-			return ();
+			return;
 		}
 
 		panic!("Expected VM variant Unit, got {:?}", self.get_typeinfo());

@@ -45,7 +45,12 @@ impl Vm {
 		if let VmVariant::Array(array) = args.remove(0) {
 			for elem in array {
 				let VmVariant::String(opt) = elem else {
-					return Err(VmError::InvalidArgType { func_name: name, arg_name: "exec_opt".to_owned(), expected: "String[]".to_owned(), got: "Vary[]".to_owned() })
+					return Err(VmError::InvalidArgType {
+						func_name: name,
+						arg_name: "exec_opt".to_owned(),
+						expected: "String[]".to_owned(),
+						got: "Vary[]".to_owned(),
+					});
 				};
 
 				options.push(opt);

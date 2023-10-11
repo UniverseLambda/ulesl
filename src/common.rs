@@ -1,6 +1,5 @@
 use std::fmt::{Display, Write};
 
-
 #[derive(Clone, Debug)]
 pub struct Location {
 	line_z: usize,
@@ -10,14 +9,22 @@ pub struct Location {
 
 impl Location {
 	pub const fn new_z(line_z: usize, col_z: usize, file: String) -> Self {
-		Self { line_z, col_z, file }
+		Self {
+			line_z,
+			col_z,
+			file,
+		}
 	}
 
 	pub fn new(line: usize, col: usize, file: String) -> Self {
 		assert_ne!(line, 0);
 		assert_ne!(col, 0);
 
-		Self { line_z: line - 1, col_z: col - 1, file }
+		Self {
+			line_z: line - 1,
+			col_z: col - 1,
+			file,
+		}
 	}
 
 	pub fn line(&self) -> usize {
