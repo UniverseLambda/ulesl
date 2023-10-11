@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::parser::FuncDecl;
 
 use super::FunctionData;
@@ -18,6 +20,12 @@ pub enum VmType {
 	Array,
 }
 
+impl Display for VmType {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		std::fmt::Debug::fmt(self, f)
+	}
+}
+
 impl From<FuncDecl> for (String, FunctionData) {
 	fn from(value: FuncDecl) -> Self {
 		(
@@ -25,7 +33,7 @@ impl From<FuncDecl> for (String, FunctionData) {
 			FunctionData {
 				args: value.args,
 				packages: value.block.statements,
-				return_type: VmType::Vary,
+				// return_type: VmType::Vary,
 			},
 		)
 	}

@@ -5,8 +5,9 @@ mod vm;
 use std::io::{IsTerminal, Read, Write};
 
 use lexer::Lexer;
+use parser::ng;
 
-use crate::{parser::Parser, vm::Vm};
+use crate::vm::Vm;
 
 fn main() {
 	// println!("[VM DEBUG] Hello, world!");
@@ -33,7 +34,8 @@ fn main() {
 		};
 
 	let lex = Lexer::new(reader, file);
-	let mut parser = Parser::new(lex, "test.ulesl".into());
+	// let mut parser = Parser::new(lex, "test.ulesl".into());
+	let mut parser = ng::Parser::new(lex, "test.ulesl".into());
 	let mut vm = Vm::new();
 
 	vm.register_default_builtins();

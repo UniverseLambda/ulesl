@@ -1,5 +1,4 @@
-use std::io::Read;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 
 use crate::common::Location;
 
@@ -7,8 +6,10 @@ use crate::common::Location;
 pub enum TokenType {
 	IntegerLiteral,
 	StringLiteral,
+	BoolLiteral,
 	Keyword,
 	Identifier,
+	SpecialInstruction,
 	Operator,
 	LineReturn,
 }
@@ -33,8 +34,10 @@ pub enum Error {
 	DecoderError(Location),
 	#[error("{0}: Invalid code point")]
 	InvalidCodePoint(Location),
-	#[error("{0}: Invalid character: {1}")]
+	#[error("{0}: Invalid character: {1:?}")]
 	InvalidCharacter(Location, char),
+	#[error("{0}: UnknownSpecialInstruction: {1}")]
+	UnknownSpecialInstruction(Location, String),
 }
 
 enum LexerMode {
@@ -56,8 +59,11 @@ pub struct Lexer<T: Read> {
 	col: usize,
 }
 
-impl<T> Lexer<T> where T: Read {
-	pub fn new(reader: T, source: String) -> Self  {
+impl<T> Lexer<T>
+where
+	T: Read,
+{
+	pub fn new(reader: T, source: String) -> Self {
 		let instance = Lexer {
 			// source,
 			reader: BufReader::new(reader),
@@ -76,14 +82,16 @@ impl<T> Lexer<T> where T: Read {
 
 		self.next_char()?;
 
-		while self.curr_char.is_whitespace() && self.curr_char != '\n' {
+		while self.curr_char.is_whitespace()
+		/* && self.curr_char != '\n' */
+		{
 			self.next_char()?;
 		}
 
 		self.curr_location = self.new_location();
 
 		let mut mode: LexerMode =
-			if self.curr_char.is_alphabetic() || self.curr_char == '_' {
+			if self.curr_char.is_alphabetic() || self.curr_char == '_' || self.curr_char == '@' {
 				LexerMode::Word
 			} else if self.curr_char.is_numeric() {
 				LexerMode::Number
@@ -91,12 +99,14 @@ impl<T> Lexer<T> where T: Read {
 				LexerMode::String(true, false, false)
 			} else if is_operator(self.curr_char) {
 				LexerMode::Operator
-			} else if self.curr_char == '\n' {
-				LexerMode::LineReturn
+			// } else if self.curr_char == '\n' {
+			// 	LexerMode::LineReturn
 			} else {
-				return Err(Error::InvalidCharacter(self.curr_location.clone(), self.curr_char));
-			}
-		;
+				return Err(Error::InvalidCharacter(
+					self.curr_location.clone(),
+					self.curr_char,
+				));
+			};
 
 		let mut no_next_char = true;
 
@@ -156,7 +166,7 @@ impl<T> Lexer<T> where T: Read {
 	fn handle_word(&mut self, buff: &mut String) -> Result<bool, Error> {
 		let c = self.curr_char;
 
-		if !c.is_alphanumeric() && c != '_' {
+		if buff.len() > 0 && !c.is_alphanumeric() && c != '_' {
 			return Ok(true);
 		}
 
@@ -243,12 +253,15 @@ impl<T> Lexer<T> where T: Read {
 				'-' | '+' | '=' | '/' | '&' | '|' => {
 					buff.push(c);
 					Ok(false)
-				},
-				_ => Ok(true)
-			}
+				}
+				_ => Ok(true),
+			};
 		}
 
-		if (buff.starts_with('<') && c == '=') || (buff.starts_with('>') && c == '=') || (buff.starts_with('/') && c == '*') {
+		if (buff.starts_with('<') && c == '=')
+			|| (buff.starts_with('>') && c == '=')
+			|| (buff.starts_with('/') && c == '*')
+		{
 			buff.push(c);
 			return Ok(false);
 		}
@@ -264,26 +277,57 @@ impl<T> Lexer<T> where T: Read {
 		let tk_type = match buff.as_str() {
 			"let" => TokenType::Keyword,
 			"fn" => TokenType::Keyword,
-			_ => TokenType::Identifier
+			"if" => TokenType::Keyword,
+			"true" | "false" => TokenType::BoolLiteral,
+			// Not yet ready... SO DON'T YOU DARE USE IT YOU FILTHY MONSTER
+			"@include" => TokenType::SpecialInstruction,
+			"@exec" => TokenType::SpecialInstruction,
+			v if v.starts_with('@') => {
+				return Err(Error::UnknownSpecialInstruction(
+					self.curr_location.clone(),
+					v.into(),
+				))
+			}
+			_ => TokenType::Identifier,
 		};
 
-		Ok(Token { content: buff.clone(), token_type: tk_type, location: self.curr_location.clone() })
+		Ok(Token {
+			content: buff.clone(),
+			token_type: tk_type,
+			location: self.curr_location.clone(),
+		})
 	}
 
 	fn finalize_number(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::IntegerLiteral, location: self.curr_location.clone() })
+		Ok(Token {
+			content: buff.clone(),
+			token_type: TokenType::IntegerLiteral,
+			location: self.curr_location.clone(),
+		})
 	}
 
 	fn finalize_string(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::StringLiteral, location: self.curr_location.clone() })
+		Ok(Token {
+			content: buff.clone(),
+			token_type: TokenType::StringLiteral,
+			location: self.curr_location.clone(),
+		})
 	}
 
 	fn finalize_operator(&mut self, buff: &mut String) -> Result<Token, Error> {
-		Ok(Token { content: buff.clone(), token_type: TokenType::Operator, location: self.curr_location.clone() })
+		Ok(Token {
+			content: buff.clone(),
+			token_type: TokenType::Operator,
+			location: self.curr_location.clone(),
+		})
 	}
 
 	fn finalize_line_return(&mut self) -> Result<Token, Error> {
-		Ok(Token { content: "\n".into(), token_type: TokenType::LineReturn, location: self.curr_location.clone() })
+		Ok(Token {
+			content: "\n".into(),
+			token_type: TokenType::LineReturn,
+			location: self.curr_location.clone(),
+		})
 	}
 
 	fn next_char(&mut self) -> Result<(), Error> {

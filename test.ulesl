@@ -1,27 +1,35 @@
-# feature("allow_var_shadowing", "implicit_variable")
+# feature("allow_var_shadowing", "implicit_variable");
 
-let its_a_var = 5
-# var its_another_var = exec()
+let its_a_var = 5;
+# var its_another_var = exec();
 
-println(its_a_var)
+if true {
+	println("PRINTED");
+}
 
-its_a_var = "MDR"
+if false {
+	println("NOT PRINTED");
+}
+
+println(its_a_var);
+
+its_a_var = "MDR";
 
 fn my_func() {
-	println("Okayyyy")
+	println("Okayyyy");
 }
 
 fn my_func_with_param(param) {
-	println("param:", param)
+	println("param:", param);
 }
 
-# exec(["pipe"], "echo", "hello")
-# exec(["no_status"], "grep", "BONCHOUR")
+exec(["pipe"], "echo", "hello");
+exec(["no_status"], "grep", "BONCHOUR");
 
-println("Hahahaha")
+println("Hahahaha");
 
-my_func()
-my_func()
-println("Nope")
-my_func()
-my_func_with_param(its_a_var)
+my_func();
+my_func();
+println("Nope");
+my_func();
+my_func_with_param(its_a_var);

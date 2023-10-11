@@ -1,8 +1,14 @@
-use std::{fmt::{Display, Write}, rc::Rc};
+use std::{
+	fmt::{Display, Write},
+	rc::Rc,
+};
 
 use crate::parser;
 
-use super::{types::{VmType, VmTypable}, error::{Result, VmError}};
+use super::{
+	error::{Result, VmError},
+	types::{VmTypable, VmType},
+};
 
 #[derive(Clone, Debug)]
 pub enum VmVariant {
@@ -28,14 +34,19 @@ impl VmVariant {
 				escaped = false;
 
 				match c {
-					'n' 	=> res_str.push('\n'),
-					'r' 	=> res_str.push('\r'),
-					't' 	=> res_str.push('\t'),
-					'\\' 	=> res_str.push('\\'),
-					'0' 	=> res_str.push('\t'),
-					'\'' 	=> res_str.push('\''),
-					'\"' 	=> res_str.push('\"'),
-					_ 		=> return Err(VmError::InvalidEscape { raw_string: str.to_owned(), invalid_escape_idx: idx - 1 })
+					'n' => res_str.push('\n'),
+					'r' => res_str.push('\r'),
+					't' => res_str.push('\t'),
+					'\\' => res_str.push('\\'),
+					'0' => res_str.push('\t'),
+					'\'' => res_str.push('\''),
+					'\"' => res_str.push('\"'),
+					_ => {
+						return Err(VmError::InvalidEscape {
+							raw_string: str.to_owned(),
+							invalid_escape_idx: idx - 1,
+						})
+					}
 				}
 
 				continue;
@@ -54,7 +65,7 @@ impl VmVariant {
 
 	pub fn unwrap_unit(self) -> () {
 		if let VmVariant::Unit = self {
-			return ()
+			return ();
 		}
 
 		panic!("Expected VM variant Unit, got {:?}", self.get_typeinfo());
@@ -104,12 +115,12 @@ impl VmVariant {
 impl VmTypable for VmVariant {
 	fn get_typeinfo(&self) -> VmType {
 		match self {
-			VmVariant::Unit			=> VmType::Unit,
-			VmVariant::Bool(_)		=> VmType::Bool,
-			VmVariant::Integer(_)	=> VmType::Integer,
-			VmVariant::String(_)	=> VmType::String,
-			VmVariant::Array(_)		=> VmType::Array,
-			VmVariant::Ref(_)		=> todo!()
+			VmVariant::Unit => VmType::Unit,
+			VmVariant::Bool(_) => VmType::Bool,
+			VmVariant::Integer(_) => VmType::Integer,
+			VmVariant::String(_) => VmType::String,
+			VmVariant::Array(_) => VmType::Array,
+			VmVariant::Ref(_) => todo!(),
 		}
 	}
 }
@@ -119,6 +130,7 @@ impl From<parser::Expr> for VmVariant {
 		match value {
 			parser::Expr::IntLiteral(v) => Self::Integer(v),
 			parser::Expr::StringLiteral(v) => Self::String(v),
+			parser::Expr::BoolLiteral(v) => Self::Bool(v),
 			parser::Expr::Array(_) => unimplemented!(),
 			parser::Expr::Identifier(_) => unimplemented!(),
 			parser::Expr::FuncCall(_) => unimplemented!(),
@@ -149,8 +161,8 @@ impl Display for VmVariant {
 				}
 
 				f.write_char(']')
-			},
-			VmVariant::Ref(v) => v.fmt(f)
+			}
+			VmVariant::Ref(v) => v.fmt(f),
 		}
 	}
 }

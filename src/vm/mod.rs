@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::parser::{
-	ArrayExpr, Expr, FuncCallExpr, FuncDecl, ParsedHighLevel, ParsedPackage, VarAssign,
+	ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage, VarAssign,
 };
 
 use self::{
@@ -19,12 +19,12 @@ use error::Result;
 
 type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> Result<VmVariant>;
 
-type VmFuncVarAssign<T: Into<VmVariant> = VmVariant> = fn(&mut Vm, String, T) -> Result<()>;
+type VmFuncVarAssign<T = VmVariant> = fn(&mut Vm, String, T) -> Result<()>;
 
 struct FunctionData {
 	packages: Vec<ParsedPackage>,
 	args: Vec<String>,
-	return_type: VmType,
+	// return_type: VmType,
 }
 
 struct Scope {
@@ -80,6 +80,9 @@ impl Vm {
 			ParsedHighLevel::FuncDecl(func_decl) => {
 				self.eval_func_decl(func_decl).map(|_| Option::None)?
 			}
+			ParsedHighLevel::If(if_statement) => {
+				self.eval_if(if_statement).map(|_| Option::None)?
+			}
 		};
 
 		Ok(ret)
@@ -119,6 +122,28 @@ impl Vm {
 		Ok(())
 	}
 
+	fn eval_if(&mut self, mut if_statement: IfStatement) -> Result<()> {
+		let cond_variant = self.eval_expr(if_statement.val)?;
+
+		let VmVariant::Bool(cond) = cond_variant else {
+			return Err(VmError::InvalidValueType { expected: VmType::Bool.to_string(), got: cond_variant.get_typeinfo().to_string() });
+		};
+
+		if cond {
+			let old_scope = self.stack_scope.take();
+
+			self.stack_scope = Some(Scope::new());
+
+			for package in if_statement.block.statements.drain(..) {
+				self.exec_package(package)?;
+			}
+
+			self.stack_scope = old_scope;
+		}
+
+		Ok(())
+	}
+
 	fn eval_array(&mut self, mut array_data: ArrayExpr) -> Result<VmVariant> {
 		let elems: Vec<VmVariant> = array_data
 			.args
@@ -133,6 +158,7 @@ impl Vm {
 		Ok(match expr {
 			Expr::IntLiteral(v) => VmVariant::Integer(v),
 			Expr::StringLiteral(v) => VmVariant::new_from_string_expr(&v)?,
+			Expr::BoolLiteral(v) => VmVariant::Bool(v),
 			Expr::Identifier(var_name) => self.get_variable(&var_name)?,
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
 			Expr::Array(array_data) => self.eval_array(array_data)?,
@@ -284,7 +310,7 @@ impl Vm {
 		Err(VmError::FuncNameNotFound(func_name))
 	}
 
-	pub fn expect_variant_type(
+	pub fn expect_arg_variant_type(
 		&self,
 		func_name: &str,
 		arg_name: &str,
@@ -315,7 +341,7 @@ impl Vm {
 		assert_ne!(expected.len(), 0);
 
 		let result = (|| {
-			let mut local_result = self.expect_variant_type(
+			let mut local_result = self.expect_arg_variant_type(
 				func_name,
 				arg_name,
 				variant,
@@ -327,7 +353,7 @@ impl Vm {
 					break;
 				}
 
-				local_result = local_result.or(self.expect_variant_type(
+				local_result = local_result.or(self.expect_arg_variant_type(
 					func_name,
 					arg_name,
 					variant,
