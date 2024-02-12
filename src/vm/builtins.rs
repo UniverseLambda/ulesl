@@ -3,7 +3,7 @@ use std::process::Command;
 use super::{
 	error::{Result, VmError},
 	types::{VmTypable, VmType},
-	variant::VmVariant,
+	{variant::VmVariant, IntoVariant},
 	Builtin, Vm,
 };
 
@@ -92,7 +92,7 @@ impl Vm {
 			Ok(v) => v,
 			Err(err) => {
 				eprintln!("Could not spawn process: {err}");
-				return Ok(VmVariant::Integer(-1));
+				return Ok((-1).into_variant());
 			}
 		};
 
@@ -119,7 +119,7 @@ impl Vm {
 			}
 		}
 
-		Ok(VmVariant::Integer(exit as i64))
+		Ok(exit.into_variant())
 	}
 
 	pub fn builtin_env(&mut self, name: String, mut args: Vec<VmVariant>) -> Result<VmVariant> {
@@ -144,7 +144,7 @@ impl Vm {
 		let env_name = arg.unwrap_string();
 
 		match std::env::var(env_name) {
-			Ok(v) => Ok(VmVariant::String(v)),
+			Ok(v) => Ok(v.into_variant()),
 			Err(_) => Ok(VmVariant::Unit)
 		}
 	}
@@ -166,6 +166,6 @@ impl Vm {
 
 		let arg = args.remove(0);
 
-		Ok(VmVariant::String(arg.get_typeinfo().to_string()))
+		Ok(arg.get_typeinfo().to_string().into_variant())
 	}
 }

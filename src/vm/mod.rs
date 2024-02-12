@@ -7,7 +7,7 @@ use crate::parser::{
 use self::{
 	error::VmError,
 	types::{VmTypable, VmType},
-	variant::VmVariant,
+	variant::{VmVariant, IntoVariant},
 };
 
 mod builtins;

@@ -22,6 +22,12 @@ pub enum VmVariant {
 	Ref(Rc<VmVariant>),
 }
 
+impl<T: IntoVariant> From<T> for VmVariant {
+	fn from(value: T) -> Self {
+		value.into_variant()
+	}
+}
+
 impl VmVariant {
 	pub fn new_from_string_expr(str: &str) -> Result<Self> {
 		let trimmed_str = &str[1..(str.len() - 1)];
@@ -166,3 +172,177 @@ impl Display for VmVariant {
 		}
 	}
 }
+
+pub trait IntoVariant {
+	fn into_variant(self) -> VmVariant;
+
+	fn clone_into_variant(&self) -> VmVariant
+	where
+		Self: Clone,
+	{
+		self.clone().into_variant()
+	}
+}
+
+impl IntoVariant for String {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::String(self)
+	}
+}
+
+impl IntoVariant for Box<str> {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::String(self.into_string())
+	}
+}
+
+impl IntoVariant for &str {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::String(self.to_string())
+	}
+}
+
+impl IntoVariant for bool {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Bool(self)
+	}
+}
+
+impl IntoVariant for () {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Unit
+	}
+
+	fn clone_into_variant(&self) -> VmVariant {
+		VmVariant::Unit
+	}
+}
+
+impl<T: IntoVariant, const N: usize> IntoVariant for [T; N] {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into_iter().map(T::into_variant).collect())
+	}
+}
+
+impl<T: IntoVariant> IntoVariant for Box<[T]> {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into_vec().into_iter().map(T::into_variant).collect())
+	}
+}
+
+impl<T: IntoVariant + Clone> IntoVariant for &[T] {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into_iter().cloned().map(T::into_variant).collect())
+	}
+}
+
+impl<T: IntoVariant> IntoVariant for Vec<T> {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into_iter().map(T::into_variant).collect())
+	}
+}
+
+impl<const N: usize> IntoVariant for [VmVariant; N] {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into())
+	}
+}
+
+impl IntoVariant for Box<[VmVariant]> {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self.into_vec())
+	}
+}
+
+impl IntoVariant for &[VmVariant] {
+	fn into_variant(self) -> VmVariant {
+		let mut vec = Vec::with_capacity(self.len());
+
+		vec.clone_from_slice(self);
+
+		VmVariant::Array(vec)
+	}
+}
+
+impl IntoVariant for Vec<VmVariant> {
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Array(self)
+	}
+}
+
+macro_rules! into_variant_num {
+	($($intty:ty),*) => {$(
+		impl IntoVariant for $intty {
+			fn into_variant(self) -> VmVariant {
+				VmVariant::Integer(self as i64)
+			}
+
+			fn clone_into_variant(&self) -> VmVariant {
+				VmVariant::Integer((*self) as i64)
+			}
+		}
+	)*
+	};
+}
+
+into_variant_num! {
+	i8, i16, i32, i64,
+	u8, u16, u32, u64
+}
+
+pub trait TryFromVariant: Sized {
+	fn try_from_variant(variant: VmVariant) -> Result<Self>;
+
+	fn expected_vmtype() -> VmType;
+}
+
+macro_rules! impl_try_from_variant {
+	($($variant:ident => $target:ty),*) => {$(
+		impl TryFromVariant for $target {
+			fn try_from_variant(variant: VmVariant) -> Result<Self> {
+				let typeinfo = variant.get_typeinfo();
+
+				if let VmVariant::$variant(v) = variant {
+					Ok(v.into())
+				} else {
+					Err(VmError::InvalidValueType {
+						expected: Self::expected_vmtype().to_string(),
+						got: typeinfo.to_string(),
+					})
+				}
+			}
+
+			fn expected_vmtype() -> VmType {
+				VmType::$variant
+			}
+		}
+	)*};
+}
+
+impl_try_from_variant! {
+	String => String,
+	String => Box<str>,
+	Bool => bool,
+	Array => Vec<VmVariant>,
+	Array => Box<[VmVariant]>,
+	Integer => i64
+}
+
+// impl TryFromVariant for String {
+// 	fn try_from_variant(variant: VmVariant) -> Result<Self> {
+// 		let typeinfo = variant.get_typeinfo();
+
+// 		if let VmVariant::String(v) = variant {
+// 			Ok(v)
+// 		} else {
+// 			Err(VmError::InvalidValueType {
+// 				expected: Self::expected_vmtype().to_string(),
+// 				got: typeinfo.to_string(),
+// 			})
+// 		}
+// 	}
+
+// 	fn expected_vmtype() -> VmType {
+// 		VmType::String
+// 	}
+// }
