@@ -2,7 +2,7 @@ use std::process::Command;
 
 use super::{
 	error::{Result, VmError},
-	types::VmType,
+	types::{VmTypable, VmType},
 	variant::VmVariant,
 	Builtin, Vm,
 };
@@ -15,6 +15,8 @@ impl Vm {
 	pub fn register_default_builtins(&mut self) {
 		self.register_builtin("println".to_owned(), Self::builtin_println);
 		self.register_builtin("exec".to_owned(), Self::builtin_exec);
+		self.register_builtin("env".to_owned(), Self::builtin_env);
+		self.register_builtin("typename".to_owned(), Self::builtin_typename);
 	}
 
 	pub fn builtin_println(&mut self, _name: String, args: Vec<VmVariant>) -> Result<VmVariant> {
@@ -118,5 +120,52 @@ impl Vm {
 		}
 
 		Ok(VmVariant::Integer(exit as i64))
+	}
+
+	pub fn builtin_env(&mut self, name: String, mut args: Vec<VmVariant>) -> Result<VmVariant> {
+		if args.is_empty() {
+			return Err(VmError::NotEnoughArg {
+				func_name: name,
+				expected: 1,
+				got: 0,
+			});
+		} else if args.len() != 1 {
+			return Err(VmError::TooMuchArgs {
+				func_name: name,
+				expected: 1,
+				got: 0,
+			});
+		}
+
+		let arg = args.remove(0);
+
+		self.expect_arg_variant_type(&name, "env_var", &arg, VmType::String)?;
+
+		let env_name = arg.unwrap_string();
+
+		match std::env::var(env_name) {
+			Ok(v) => Ok(VmVariant::String(v)),
+			Err(_) => Ok(VmVariant::Unit)
+		}
+	}
+
+	pub fn builtin_typename(&mut self, name: String, mut args: Vec<VmVariant>) -> Result<VmVariant> {
+		if args.is_empty() {
+			return Err(VmError::NotEnoughArg {
+				func_name: name,
+				expected: 1,
+				got: 0,
+			});
+		} else if args.len() != 1 {
+			return Err(VmError::TooMuchArgs {
+				func_name: name,
+				expected: 1,
+				got: 0,
+			});
+		}
+
+		let arg = args.remove(0);
+
+		Ok(VmVariant::String(arg.get_typeinfo().to_string()))
 	}
 }
