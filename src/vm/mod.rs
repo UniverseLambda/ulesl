@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
 	common::Location,
-	parser::{
+	parser::types::{
 		ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
 		VarAssign,
 	},

@@ -1,115 +1,17 @@
-use thiserror::Error;
-
-use std::{io::Read, num::ParseIntError};
+use std::io::Read;
 
 use crate::lexer::{self, Lexer, Token, TokenType};
 
-#[derive(Debug, Clone)]
-pub struct IfStatement {
-	pub val: Expr,
-	pub block: StatementBlock,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncCallExpr {
-	pub name: String,
-	pub args: Vec<Expr>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ArrayExpr {
-	pub args: Vec<Expr>,
-}
-
-// #[derive(Debug, Clone)]
-// pub struct VarDecl {
-// 	pub assign: VarAssign,
-// }
-
-// impl Deref for VarDecl {
-// 	type Target = VarAssign;
-
-// 	fn deref(&self) -> &Self::Target {
-// 		&self.assign
-// 	}
-// }
-
-// impl DerefMut for VarDecl {
-// 	fn deref_mut(&mut self) -> &mut Self::Target {
-// 		&mut self.assign
-// 	}
-// }
-
-#[derive(Debug, Clone)]
-pub struct VarAssign {
-	pub name: String,
-	pub val: Expr,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncDecl {
-	pub name: String,
-	pub args: Vec<String>,
-	// pub ret_type: VmType,
-	pub block: StatementBlock,
-}
-
-#[derive(Debug, Clone)]
-pub struct StatementBlock {
-	pub statements: Vec<ParsedPackage>,
-	// pub ret_type: VmType,
-}
-
-#[derive(Debug, Clone)]
-pub enum Expr {
-	IntLiteral(i64),
-	StringLiteral(String),
-	BoolLiteral(bool),
-	Identifier(String),
-	FuncCall(FuncCallExpr),
-	Array(ArrayExpr),
-}
-
-#[derive(Debug, Clone)]
-pub enum ParsedHighLevel {
-	Noop,
-	VarDecl(VarAssign),
-	VarSet(VarAssign),
-	FuncDecl(FuncDecl),
-	FuncCall(FuncCallExpr),
-	If(IfStatement),
-}
-
-#[derive(Debug, Clone)]
-pub struct ParsedPackage {
-	pub source: String,
-	pub parsed: ParsedHighLevel,
-}
+use super::{
+	error::{ParserError, Result},
+	ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
+	StatementBlock, VarAssign,
+};
 
 pub struct Parser<T: Read> {
 	lexer: Lexer<T>,
 	source: String,
 	stored_token: Option<Token>,
-}
-
-pub type Result<T> = std::result::Result<T, ParserError>;
-
-#[derive(Error, Debug)]
-pub enum ParserError {
-	#[error("{0}")]
-	Lexer(#[from] lexer::Error),
-	#[error("{}: unexpected token \"{}\", expected: {1:?}", .0.location, .0.content)]
-	UnexpectedToken(Token, Option<String>),
-	#[error("Invalid number: \"{0}\"")]
-	IntegerParsing(String, Option<ParseIntError>),
-	#[error("Unexpected End of File")]
-	UnexpectedEndOfFile,
-}
-
-impl From<(String, ParseIntError)> for ParserError {
-	fn from(value: (String, ParseIntError)) -> Self {
-		Self::IntegerParsing(value.0, Some(value.1))
-	}
 }
 
 impl<T: Read> Parser<T> {

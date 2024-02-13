@@ -1,13 +1,14 @@
 use std::io::Read;
 
+pub mod error;
 pub mod legacy;
+pub mod types;
 
-pub use legacy::{
-	ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
-	ParserError, Result, StatementBlock, VarAssign,
-};
+use types::*;
 
 use crate::lexer::{self, Lexer, Token, TokenType};
+
+use self::error::{ParserError, Result};
 
 pub struct Parser<T: Read> {
 	lexer: Lexer<T>,

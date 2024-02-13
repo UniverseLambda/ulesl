@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::parser::FuncDecl;
+use crate::parser::types::FuncDecl;
 
 use super::FunctionData;
 

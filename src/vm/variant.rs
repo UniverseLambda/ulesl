@@ -83,15 +83,15 @@ impl VmTypable for VmVariant {
 	}
 }
 
-impl From<parser::Expr> for VmVariant {
-	fn from(value: parser::Expr) -> Self {
+impl From<parser::types::Expr> for VmVariant {
+	fn from(value: parser::types::Expr) -> Self {
 		match value {
-			parser::Expr::IntLiteral(v) => Self::Integer(v),
-			parser::Expr::StringLiteral(v) => Self::String(v),
-			parser::Expr::BoolLiteral(v) => Self::Bool(v),
-			parser::Expr::Array(_) => unimplemented!(),
-			parser::Expr::Identifier(_) => unimplemented!(),
-			parser::Expr::FuncCall(_) => unimplemented!(),
+			parser::types::Expr::IntLiteral(v) => Self::Integer(v),
+			parser::types::Expr::StringLiteral(v) => Self::String(v),
+			parser::types::Expr::BoolLiteral(v) => Self::Bool(v),
+			parser::types::Expr::Array(_) => unimplemented!(),
+			parser::types::Expr::Identifier(_) => unimplemented!(),
+			parser::types::Expr::FuncCall(_) => unimplemented!(),
 		}
 	}
 }
