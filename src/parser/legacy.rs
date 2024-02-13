@@ -72,6 +72,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 pub enum ParsedHighLevel {
+	Noop,
 	VarDecl(VarAssign),
 	VarSet(VarAssign),
 	FuncDecl(FuncDecl),

@@ -36,7 +36,8 @@ impl<T: Read> Parser<T> {
 		};
 
 		self.expect_token_type(&token, TokenType::Identifier)
-			.or_else(|_| self.expect_token_type(&token, TokenType::Keyword))?;
+			.or_else(|_| self.expect_token_type(&token, TokenType::Keyword))
+			.or_else(|_| self.expect_token(&token, TokenType::Operator, ";"))?;
 
 		let high_level = if let TokenType::Keyword = &token.token_type {
 			match token.content.as_str() {
@@ -50,6 +51,10 @@ impl<T: Read> Parser<T> {
 					)
 				}
 			}
+		} else if let TokenType::Operator = &token.token_type {
+			self.advance_token()?;
+
+			ParsedHighLevel::Noop
 		} else {
 			self.advance_token()?;
 
@@ -75,7 +80,7 @@ impl<T: Read> Parser<T> {
 					self.retain_token();
 					ParsedHighLevel::VarSet(self.parse_var_decl_or_assign()?)
 				}
-				_ => self.unexpected_token(disc_tk, Some("Zarma".to_string()))?,
+				_ => self.unexpected_token(disc_tk, Some("( or =".to_string()))?,
 			}
 		};
 

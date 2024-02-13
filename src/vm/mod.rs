@@ -116,6 +116,7 @@ impl Vm {
 			ParsedHighLevel::If(if_statement) => {
 				self.eval_if(if_statement).map(|_| Option::None)?
 			}
+			ParsedHighLevel::Noop => Option::None,
 		};
 
 		Ok(ret)
