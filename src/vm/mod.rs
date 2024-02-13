@@ -3,7 +3,7 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{
 	common::Location,
 	parser::types::{
-		ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
+		ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, LocatedType, ParsedHighLevel,
 		VarAssign,
 	},
 };
@@ -25,7 +25,7 @@ type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> VmResult<VmVariant>;
 type VmFuncVarAssign<T = VmVariant> = fn(&mut Vm, String, T) -> VmResult<()>;
 
 struct FunctionData {
-	packages: Vec<ParsedPackage>,
+	packages: Vec<LocatedType<ParsedHighLevel>>,
 	args: Vec<String>,
 	// return_type: VmType,
 }
@@ -60,6 +60,7 @@ pub struct Vm {
 	builtins: HashMap<String, Builtin>,
 	allow_var_shadowing: bool,
 	allow_implicit_var: bool,
+	root_package_location: Location,
 }
 
 impl Vm {
@@ -70,6 +71,7 @@ impl Vm {
 			builtins: HashMap::new(),
 			allow_var_shadowing: false,
 			allow_implicit_var: false,
+			root_package_location: Location::new_z(0, 0, "_vm".into()),
 		}
 	}
 
@@ -93,10 +95,16 @@ impl Vm {
 		}
 	}
 
-	pub fn exec_package(&mut self, package: ParsedPackage) -> VmResult<Option<VmVariant>> {
+	pub fn exec_package(
+		&mut self,
+		located_package: LocatedType<ParsedHighLevel>,
+	) -> VmResult<Option<VmVariant>> {
 		// let source: String = package.source;
 
-		let ret = match package.parsed {
+		self.root_package_location = located_package.location;
+		let package = located_package.inner;
+
+		let ret = match package {
 			ParsedHighLevel::VarDecl(assign_data) => self
 				.eval_var_assign(assign_data, Self::new_variable)
 				.map(|_| Option::None)?,

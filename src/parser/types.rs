@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::common::Location;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LocatedType<T: Clone + Debug> {
 	pub inner: T,
 	pub location: Location,
@@ -53,7 +53,7 @@ pub struct FuncDecl {
 
 #[derive(Debug, Clone)]
 pub struct StatementBlock {
-	pub statements: Vec<ParsedPackage>,
+	pub statements: Vec<LocatedType<ParsedHighLevel>>,
 	// pub ret_type: VmType,
 }
 
@@ -75,10 +75,4 @@ pub enum ParsedHighLevel {
 	FuncDecl(FuncDecl),
 	FuncCall(FuncCallExpr),
 	If(IfStatement),
-}
-
-#[derive(Debug, Clone)]
-pub struct ParsedPackage {
-	pub source: String,
-	pub parsed: ParsedHighLevel,
 }

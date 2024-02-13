@@ -1,7 +1,6 @@
 use std::io::Read;
 
 pub mod error;
-pub mod legacy;
 pub mod types;
 
 use types::*;
@@ -29,12 +28,14 @@ impl<T: Read> Parser<T> {
 		}
 	}
 
-	pub fn next_package(&mut self) -> Result<Option<ParsedPackage>> {
+	pub fn next_package(&mut self) -> Result<Option<LocatedType<ParsedHighLevel>>> {
 		let peeked_token = self.peek_token()?;
 
 		let Some(token) = peeked_token else {
 			return Ok(None);
 		};
+
+		let location = token.location.clone();
 
 		self.expect_token_type(&token, TokenType::Identifier)
 			.or_else(|_| self.expect_token_type(&token, TokenType::Keyword))
@@ -85,10 +86,7 @@ impl<T: Read> Parser<T> {
 			}
 		};
 
-		Ok(Some(ParsedPackage {
-			source: self.source.clone(),
-			parsed: high_level,
-		}))
+		Ok(Some(LocatedType::new(high_level, location)))
 	}
 
 	fn parse_var_decl_or_assign(&mut self) -> Result<VarAssign> {
