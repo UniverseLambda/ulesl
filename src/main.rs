@@ -51,7 +51,7 @@ fn main() {
 				// println!("[VM DEBUG] Parsed package: {p:?}");
 
 				if let Err(err) = vm.exec_package(p) {
-					eprintln!("Vm error: {err:?}");
+					eprintln!("Vm error: {err}");
 				}
 			}
 			Ok(None) => {

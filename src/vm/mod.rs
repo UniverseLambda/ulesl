@@ -1,13 +1,16 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::parser::{
-	ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage, VarAssign,
+use crate::{
+	common::Location,
+	parser::{
+		ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, ParsedHighLevel, ParsedPackage,
+		VarAssign,
+	},
 };
 
 use self::{
-	error::VmError,
-	types::{VmTypable, VmType},
-	variant::{VmVariant, IntoVariant},
+	error::{VmError, VmResultExt},
+	variant::{IntoVariant, VmVariant},
 };
 
 mod builtins;
@@ -15,11 +18,11 @@ mod error;
 mod types;
 mod variant;
 
-use error::Result;
+use error::VmResult;
 
-type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> Result<VmVariant>;
+type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> VmResult<VmVariant>;
 
-type VmFuncVarAssign<T = VmVariant> = fn(&mut Vm, String, T) -> Result<()>;
+type VmFuncVarAssign<T = VmVariant> = fn(&mut Vm, String, T) -> VmResult<()>;
 
 struct FunctionData {
 	packages: Vec<ParsedPackage>,
@@ -30,6 +33,7 @@ struct FunctionData {
 struct Scope {
 	variables: HashMap<String, VmVariant>,
 	functions: HashMap<String, Rc<FunctionData>>,
+	caller: Location,
 }
 
 impl Scope {
@@ -37,6 +41,15 @@ impl Scope {
 		Scope {
 			variables: HashMap::new(),
 			functions: HashMap::new(),
+			caller: Location::new_z(0, 0, "_vm".into()),
+		}
+	}
+
+	fn new_subscope(caller: Location) -> Self {
+		Scope {
+			variables: HashMap::new(),
+			functions: HashMap::new(),
+			caller,
 		}
 	}
 }
@@ -60,7 +73,27 @@ impl Vm {
 		}
 	}
 
-	pub fn exec_package(&mut self, package: ParsedPackage) -> Result<Option<VmVariant>> {
+	pub fn caller_location(&self) -> Location {
+		self.get_scope().caller.clone()
+	}
+
+	fn get_scope(&self) -> &Scope {
+		if let Some(local_scope) = self.stack_scope.as_ref() {
+			local_scope
+		} else {
+			&self.global_scope
+		}
+	}
+
+	fn get_scope_mut(&mut self) -> &mut Scope {
+		if let Some(local_scope) = self.stack_scope.as_mut() {
+			local_scope
+		} else {
+			&mut self.global_scope
+		}
+	}
+
+	pub fn exec_package(&mut self, package: ParsedPackage) -> VmResult<Option<VmVariant>> {
 		// let source: String = package.source;
 
 		let ret = match package.parsed {
@@ -88,13 +121,13 @@ impl Vm {
 		Ok(ret)
 	}
 
-	fn eval_var_assign(&mut self, var_assign: VarAssign, vmfunc: VmFuncVarAssign) -> Result<()> {
+	fn eval_var_assign(&mut self, var_assign: VarAssign, vmfunc: VmFuncVarAssign) -> VmResult<()> {
 		let evaluated_val = self.eval_expr(var_assign.val)?;
 
 		vmfunc(self, var_assign.name, evaluated_val)
 	}
 
-	fn eval_func_call(&mut self, mut func_call_expr: FuncCallExpr) -> Result<VmVariant> {
+	fn eval_func_call(&mut self, mut func_call_expr: FuncCallExpr) -> VmResult<VmVariant> {
 		let mut params: Vec<VmVariant> = Vec::with_capacity(func_call_expr.args.len());
 
 		for arg_expr in func_call_expr.args.drain(..) {
@@ -104,7 +137,7 @@ impl Vm {
 		self.call_func(func_call_expr.name, params)
 	}
 
-	fn eval_func_decl(&mut self, func_decl: FuncDecl) -> Result<()> {
+	fn eval_func_decl(&mut self, func_decl: FuncDecl) -> VmResult<()> {
 		let scope = if let Some(scope) = self.stack_scope.as_mut() {
 			scope
 		} else {
@@ -114,7 +147,7 @@ impl Vm {
 		let (name, func_data) = func_decl.into();
 
 		if scope.functions.contains_key(&name) {
-			return Err(VmError::FuncNameDuplicate(name));
+			return Err(VmError::func_name_dup(name));
 		}
 
 		scope.functions.insert(name, Rc::new(func_data));
@@ -122,17 +155,10 @@ impl Vm {
 		Ok(())
 	}
 
-	fn eval_if(&mut self, mut if_statement: IfStatement) -> Result<()> {
+	fn eval_if(&mut self, mut if_statement: IfStatement) -> VmResult<()> {
 		let cond_variant = self.eval_expr(if_statement.val)?;
 
-		let VmVariant::Bool(cond) = cond_variant else {
-			return Err(VmError::InvalidValueType {
-				expected: VmType::Bool.to_string(),
-				got: cond_variant.get_typeinfo().to_string(),
-			});
-		};
-
-		if cond {
+		if cond_variant.try_native()? {
 			let old_scope = self.stack_scope.take();
 
 			self.stack_scope = Some(Scope::new());
@@ -147,17 +173,17 @@ impl Vm {
 		Ok(())
 	}
 
-	fn eval_array(&mut self, mut array_data: ArrayExpr) -> Result<VmVariant> {
+	fn eval_array(&mut self, mut array_data: ArrayExpr) -> VmResult<VmVariant> {
 		let elems: Vec<VmVariant> = array_data
 			.args
 			.drain(..)
 			.map(|e| self.eval_expr(e))
-			.collect::<Result<Vec<VmVariant>>>()?;
+			.collect::<VmResult<Vec<VmVariant>>>()?;
 
 		Ok(VmVariant::Array(elems))
 	}
 
-	fn eval_expr(&mut self, expr: Expr) -> Result<VmVariant> {
+	fn eval_expr(&mut self, expr: Expr) -> VmResult<VmVariant> {
 		Ok(match expr {
 			Expr::IntLiteral(v) => VmVariant::Integer(v),
 			Expr::StringLiteral(v) => VmVariant::new_from_string_expr(&v)?,
@@ -168,7 +194,7 @@ impl Vm {
 		})
 	}
 
-	pub fn new_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> Result<()> {
+	pub fn new_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {
 		let scope = if let Some(scope) = self.stack_scope.as_mut() {
 			scope
 		} else {
@@ -176,7 +202,7 @@ impl Vm {
 		};
 
 		if !self.allow_var_shadowing && scope.variables.contains_key(&var_name) {
-			Err(VmError::VarNameDuplicate(var_name))
+			Err(VmError::var_name_dup(var_name))
 		} else {
 			let vm_value: VmVariant = value.into();
 
@@ -188,7 +214,7 @@ impl Vm {
 		}
 	}
 
-	pub fn set_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> Result<()> {
+	pub fn set_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {
 		if !self.allow_implicit_var
 			&& self
 				.stack_scope
@@ -196,7 +222,7 @@ impl Vm {
 				.map_or(false, |scope| scope.variables.contains_key(&var_name))
 			&& !self.global_scope.variables.contains_key(&var_name)
 		{
-			return Err(VmError::VarNameNotFound(var_name));
+			return Err(VmError::unknown_identifier(var_name));
 		}
 
 		let vm_value: VmVariant = value.into();
@@ -214,7 +240,7 @@ impl Vm {
 		Ok(())
 	}
 
-	pub fn get_variable(&self, var_name: &String) -> Result<VmVariant> {
+	pub fn get_variable(&self, var_name: &String) -> VmResult<VmVariant> {
 		let scope = if let Some(scope) = self.stack_scope.as_ref() {
 			scope
 		} else {
@@ -226,7 +252,7 @@ impl Vm {
 		if let Some(val) = scope.variables.get(var_name) {
 			Ok(val.clone())
 		} else {
-			Err(VmError::VarNameNotFound(var_name.clone()))
+			Err(VmError::unknown_identifier(var_name.clone()))
 		}
 	}
 
@@ -234,7 +260,7 @@ impl Vm {
 		&mut self,
 		func_name: String,
 		mut params: Vec<VmVariant>,
-	) -> Result<VmVariant> {
+	) -> VmResult<VmVariant> {
 		if let Some(builtin_func) = self.builtins.get(&func_name) {
 			return builtin_func(self, func_name, params);
 		}
@@ -255,27 +281,14 @@ impl Vm {
 		if let Some(user_func) = user_func {
 			let old_scope = self.stack_scope.take();
 
-			self.stack_scope = Some(Scope::new());
+			self.stack_scope = Some(Scope::new_subscope(Location::new(0, 0, "_vm".to_string())));
 
 			// TODO: Parameters
 
-			match params.len().cmp(&user_func.args.len()) {
-				std::cmp::Ordering::Less => {
-					return Err(VmError::NotEnoughArg {
-						func_name,
-						expected: user_func.args.len(),
-						got: params.len(),
-					});
-				}
-				std::cmp::Ordering::Equal => (),
-				std::cmp::Ordering::Greater => {
-					return Err(VmError::TooMuchArgs {
-						func_name,
-						expected: user_func.args.len(),
-						got: params.len(),
-					})
-				}
-			};
+			if params.len() != user_func.args.len() {
+				return Err(VmError::wrong_arg_count(user_func.args.len(), params.len()))
+					.with_context_func_call(self.caller_location(), func_name);
+			}
 
 			let zipped = user_func.args.iter().zip(params.drain(..));
 
@@ -289,7 +302,7 @@ impl Vm {
 
 			// zipped.unzip() when I'll implement default values
 
-			let mut res: Result<VmVariant> = Ok(VmVariant::Unit);
+			let mut res: VmResult<VmVariant> = Ok(VmVariant::Unit);
 
 			for package in &user_func.packages {
 				match self.exec_package(package.clone()) {
@@ -313,86 +326,6 @@ impl Vm {
 			return res;
 		}
 
-		Err(VmError::FuncNameNotFound(func_name))
-	}
-
-	pub fn expect_arg_variant_type(
-		&self,
-		func_name: &str,
-		arg_name: &str,
-		variant: &VmVariant,
-		expected: VmType,
-	) -> Result<()> {
-		let typeinfo = variant.get_typeinfo();
-
-		if typeinfo == expected {
-			return Ok(());
-		}
-
-		Err(VmError::InvalidArgType {
-			func_name: func_name.to_owned(),
-			arg_name: arg_name.to_owned(),
-			expected: format!("{expected:?}"),
-			got: format!("{typeinfo:?}"),
-		})
-	}
-
-	pub fn expect_variant_types(
-		&self,
-		func_name: &str,
-		arg_name: &str,
-		variant: &VmVariant,
-		expected: &[VmType],
-	) -> Result<()> {
-		assert_ne!(expected.len(), 0);
-
-		let result = {
-			let mut local_result = self.expect_arg_variant_type(
-				func_name,
-				arg_name,
-				variant,
-				expected.first().unwrap().clone(),
-			);
-
-			for e in &expected[1..] {
-				if local_result.is_ok() {
-					break;
-				}
-
-				local_result = local_result.or(self.expect_arg_variant_type(
-					func_name,
-					arg_name,
-					variant,
-					e.clone(),
-				))
-			}
-
-			local_result
-		};
-
-		if let Err(VmError::InvalidArgType { .. }) = result {
-			let mut expected_str = String::new();
-
-			for (idx, vt) in expected.iter().enumerate() {
-				if idx != 0 {
-					if idx == (expected.len() - 1) {
-						expected_str.push_str(" or ")
-					} else {
-						expected_str.push_str(", ")
-					}
-
-					expected_str.push_str(&format!("{vt:?}"));
-				}
-			}
-
-			return Err(VmError::InvalidArgType {
-				func_name: func_name.to_owned(),
-				arg_name: arg_name.to_owned(),
-				expected: expected_str,
-				got: format!("{:?}", variant.get_typeinfo()),
-			});
-		}
-
-		Ok(())
+		Err(VmError::unknown_identifier(func_name))
 	}
 }

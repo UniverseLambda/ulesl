@@ -6,7 +6,7 @@ use std::{
 use crate::parser;
 
 use super::{
-	error::{Result, VmError},
+	error::{VmError, VmResult},
 	types::{VmTypable, VmType},
 };
 
@@ -29,7 +29,7 @@ impl<T: IntoVariant> From<T> for VmVariant {
 }
 
 impl VmVariant {
-	pub fn new_from_string_expr(str: &str) -> Result<Self> {
+	pub fn new_from_string_expr(str: &str) -> VmResult<Self> {
 		let trimmed_str = &str[1..(str.len() - 1)];
 		let mut res_str = String::with_capacity(trimmed_str.len());
 
@@ -47,12 +47,7 @@ impl VmVariant {
 					'0' => res_str.push('\t'),
 					'\'' => res_str.push('\''),
 					'\"' => res_str.push('\"'),
-					_ => {
-						return Err(VmError::InvalidEscape {
-							raw_string: str.to_owned(),
-							invalid_escape_idx: idx - 1,
-						})
-					}
+					_ => return Err(VmError::invalid_escape(str.to_owned(), idx - 1)),
 				}
 
 				continue;
@@ -69,52 +64,9 @@ impl VmVariant {
 		Ok(Self::String(res_str))
 	}
 
-	pub fn unwrap_unit(self) {
-		if let VmVariant::Unit = self {
-			return;
-		}
-
-		panic!("Expected VM variant Unit, got {:?}", self.get_typeinfo());
-	}
-
-	pub fn unwrap_bool(self) -> bool {
-		if let VmVariant::Bool(b) = self {
-			return b;
-		}
-
-		panic!("Expected VM variant Bool, got {:?}", self.get_typeinfo());
-	}
-
-	pub fn unwrap_integer(self) -> i64 {
-		if let VmVariant::Integer(v) = self {
-			return v;
-		}
-
-		panic!("Expected VM variant Integer, got {:?}", self.get_typeinfo());
-	}
-
-	pub fn unwrap_string(self) -> String {
-		if let VmVariant::String(v) = self {
-			return v;
-		}
-
-		panic!("Expected VM variant String, got {:?}", self.get_typeinfo());
-	}
-
-	pub fn unwrap_array(self) -> Vec<VmVariant> {
-		if let VmVariant::Array(v) = self {
-			return v;
-		}
-
-		panic!("Expected VM variant Array, got {:?}", self.get_typeinfo());
-	}
-
-	pub fn unwrap_ref(self) -> Rc<VmVariant> {
-		if let VmVariant::Ref(v) = self {
-			return v;
-		}
-
-		panic!("Expected VM variant Ref, got {:?}", self.get_typeinfo());
+	#[inline]
+	pub fn try_native<T: TryFromVariant>(self) -> VmResult<T> {
+		T::try_from_variant(self)
 	}
 }
 
@@ -291,7 +243,7 @@ into_variant_num! {
 }
 
 pub trait TryFromVariant: Sized {
-	fn try_from_variant(variant: VmVariant) -> Result<Self>;
+	fn try_from_variant(variant: VmVariant) -> VmResult<Self>;
 
 	fn expected_vmtype() -> VmType;
 }
@@ -299,16 +251,13 @@ pub trait TryFromVariant: Sized {
 macro_rules! impl_try_from_variant {
 	($($variant:ident => $target:ty),*) => {$(
 		impl TryFromVariant for $target {
-			fn try_from_variant(variant: VmVariant) -> Result<Self> {
+			fn try_from_variant(variant: VmVariant) -> VmResult<Self> {
 				let typeinfo = variant.get_typeinfo();
 
 				if let VmVariant::$variant(v) = variant {
 					Ok(v.into())
 				} else {
-					Err(VmError::InvalidValueType {
-						expected: Self::expected_vmtype().to_string(),
-						got: typeinfo.to_string(),
-					})
+					Err(VmError::invalid_value_type(Self::expected_vmtype().to_string(), typeinfo.to_string()))
 				}
 			}
 
