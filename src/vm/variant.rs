@@ -1,9 +1,10 @@
 use std::{
+	cmp::Ordering,
 	fmt::{Display, Write},
 	rc::Rc,
 };
 
-use crate::parser;
+use crate::parser::{self, types::Comparison};
 
 use super::{
 	error::{VmError, VmResult},
@@ -68,6 +69,35 @@ impl VmVariant {
 	pub fn try_native<T: TryFromVariant>(self) -> VmResult<T> {
 		T::try_from_variant(self)
 	}
+
+	pub fn compare(&self, other: &Self) -> Option<Ordering> {
+		match (self, other) {
+			(Self::Unit, Self::Unit) => Some(Ordering::Equal),
+			(Self::Bool(a), Self::Bool(b)) => Some(a.cmp(b)),
+			(Self::Integer(a), Self::Integer(b)) => Some(a.cmp(b)),
+			(Self::Ref(a), Self::Ref(b)) => a.compare(b),
+			(Self::String(a), Self::String(b)) => Some(a.cmp(b)),
+			_ => None,
+		}
+	}
+}
+
+impl PartialEq for VmVariant {
+	fn eq(&self, other: &Self) -> bool {
+		self.compare(other).map_or(false, |v| v == Ordering::Equal)
+	}
+}
+
+impl PartialOrd for VmVariant {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		self.compare(other).and_then(|v| {
+			if let Ordering::Equal = v {
+				None
+			} else {
+				Some(v)
+			}
+		})
+	}
 }
 
 impl VmTypable for VmVariant {
@@ -92,6 +122,7 @@ impl From<parser::types::Expr> for VmVariant {
 			parser::types::Expr::Array(_) => unimplemented!(),
 			parser::types::Expr::Identifier(_) => unimplemented!(),
 			parser::types::Expr::FuncCall(_) => unimplemented!(),
+			parser::types::Expr::Compare(_) => unimplemented!(),
 		}
 	}
 }

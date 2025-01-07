@@ -160,7 +160,7 @@ impl<T: Read> Parser<T> {
 		// We consume the token as we are the one doing the parsing
 		let expr_start = self.next_or_fail()?;
 
-		Ok(match expr_start.token_type {
+		let first_expr = match expr_start.token_type {
 			TokenType::IntegerLiteral => Expr::IntLiteral(
 				expr_start
 					.content
@@ -172,7 +172,15 @@ impl<T: Read> Parser<T> {
 			TokenType::BoolLiteral => Expr::BoolLiteral(expr_start.content.parse().unwrap()),
 			TokenType::Operator if expr_start.content == "[" => Expr::Array(self.parse_array()?),
 			_ => return self.unexpected_token(expr_start, Some("expression".to_string())),
-		})
+		};
+
+		if let Some(token) = self.peek_token()? {
+			if is_binary_expr_operator(&token.content) {
+				return self.parse_binary_expr(first_expr);
+			}
+		}
+
+		Ok(first_expr)
 	}
 
 	fn parse_branch_identifier_expr(&mut self) -> Result<Expr> {
@@ -191,9 +199,25 @@ impl<T: Read> Parser<T> {
 				name: identifier.content,
 				args,
 			}))
+		} else if is_binary_expr_operator(&peeked.content) {
+			todo!()
 		} else {
 			Ok(Expr::Identifier(identifier.content))
 		}
+	}
+
+	fn parse_binary_expr(&mut self, first_expr: Expr) -> Result<Expr> {
+		let current_token = self.next_or_fail()?;
+
+		let cmp_op: Comparison = current_token.try_into()?;
+
+		let second_expr = self.parse_expr()?;
+
+		Ok(Expr::Compare(CompareExpr {
+			left: Box::new(first_expr),
+			right: Box::new(second_expr),
+			comparison: cmp_op,
+		}))
 	}
 
 	fn parse_array(&mut self) -> Result<ArrayExpr> {
@@ -381,4 +405,9 @@ impl<T: Read> Parser<T> {
 			Ok(Some(result?))
 		}
 	}
+}
+
+#[inline]
+fn is_binary_expr_operator(token: &str) -> bool {
+	matches!(token, "==" | "<=" | ">=" | ">" | "<" | "!=")
 }

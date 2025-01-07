@@ -201,6 +201,11 @@ pub enum VmErrorType {
 		raw_string: String,
 		invalid_escape_idx: usize,
 	},
+	#[error("invalid comparison: could not compare types {left_type} and {right_type}")]
+	InvalidComparison {
+		left_type: String,
+		right_type: String,
+	},
 }
 
 pub trait VmResultExt {

@@ -1,10 +1,10 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 
 use crate::{
 	common::Location,
 	parser::types::{
-		ArrayExpr, Expr, FuncCallExpr, FuncDecl, IfStatement, LocatedType, ParsedHighLevel,
-		VarAssign,
+		ArrayExpr, CompareExpr, Comparison, Expr, FuncCallExpr, FuncDecl, IfStatement, LocatedType,
+		ParsedHighLevel, VarAssign,
 	},
 };
 
@@ -18,7 +18,8 @@ mod error;
 mod types;
 mod variant;
 
-use error::VmResult;
+use error::{VmErrorType, VmResult};
+use types::VmTypable;
 
 type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> VmResult<VmVariant>;
 
@@ -200,6 +201,23 @@ impl Vm {
 			Expr::Identifier(var_name) => self.get_variable(&var_name)?,
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
 			Expr::Array(array_data) => self.eval_array(array_data)?,
+			Expr::Compare(compare_data) => self.eval_comparison(compare_data)?,
+		})
+	}
+
+	fn eval_comparison(&mut self, expr: CompareExpr) -> VmResult<VmVariant> {
+		let left = self.eval_expr(*expr.left)?;
+		let right = self.eval_expr(*expr.right)?;
+		let Some(ord) = left.compare(&right) else {
+			return Err(VmError::new(VmErrorType::InvalidComparison {
+				left_type: left.get_typeinfo().to_string(),
+				right_type: right.get_typeinfo().to_string(),
+			}));
+		};
+
+		Ok(match (expr.comparison, ord) {
+			(Comparison::Equal, Ordering::Equal) => VmVariant::Bool(true),
+			(Comparison::NotEqual, ord) => VmVariant::Bool(ord != Ordering::Equal),
 		})
 	}
 
@@ -290,7 +308,11 @@ impl Vm {
 		if let Some(user_func) = user_func {
 			let old_scope = self.stack_scope.take();
 
-			self.stack_scope = Some(Scope::new_subscope(Location::new(0, 0, "_vm".to_string())));
+			self.stack_scope = Some(Scope::new_subscope(Location::new_z(
+				0,
+				0,
+				"_vm".to_string(),
+			)));
 
 			// TODO: Parameters
 

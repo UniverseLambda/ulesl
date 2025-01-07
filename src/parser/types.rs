@@ -1,6 +1,6 @@
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug, str::FromStr};
 
-use crate::common::Location;
+use crate::{common::Location, lexer::Token};
 
 #[derive(Clone, Debug)]
 pub struct LocatedType<T: Clone + Debug> {
@@ -38,6 +38,42 @@ pub struct ArrayExpr {
 }
 
 #[derive(Debug, Clone)]
+pub struct CompareExpr {
+	pub left: Box<Expr>,
+	pub right: Box<Expr>,
+	pub comparison: Comparison,
+}
+
+#[derive(Debug, Clone)]
+pub enum Comparison {
+	Less,
+	LessOrEqual,
+	Equal,
+	NotEqual,
+	GreaterOrEqual,
+	Greater,
+}
+
+#[derive(Debug, Clone)]
+pub struct OperatorNotComparator(pub Token);
+
+impl TryFrom<Token> for Comparison {
+	type Error = OperatorNotComparator;
+
+	fn try_from(s: Token) -> Result<Self, OperatorNotComparator> {
+		match s.content.as_str() {
+			"==" => Ok(Self::Equal),
+			"!=" => Ok(Self::NotEqual),
+			"<" => Ok(Self::Less),
+			">" => Ok(Self::Greater),
+			"<=" => Ok(Self::LessOrEqual),
+			">=" => Ok(Self::GreaterOrEqual),
+			_ => Err(OperatorNotComparator(s)),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct VarAssign {
 	pub name: String,
 	pub val: Expr,
@@ -65,6 +101,7 @@ pub enum Expr {
 	Identifier(String),
 	FuncCall(FuncCallExpr),
 	Array(ArrayExpr),
+	Compare(CompareExpr),
 }
 
 #[derive(Debug, Clone)]
