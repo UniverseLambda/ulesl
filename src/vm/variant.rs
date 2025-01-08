@@ -1,7 +1,7 @@
 use std::{
 	cmp::Ordering,
 	collections::HashMap,
-	fmt::{Display, Pointer, Write},
+	fmt::{Display, Write},
 };
 
 use crate::parser;
