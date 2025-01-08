@@ -215,9 +215,17 @@ impl Vm {
 			}));
 		};
 
-		Ok(match (expr.comparison, ord) {
-			(Comparison::Equal, Ordering::Equal) => VmVariant::Bool(true),
-			(Comparison::NotEqual, ord) => VmVariant::Bool(ord != Ordering::Equal),
+		Ok(match (ord, expr.comparison) {
+			(
+				Ordering::Equal,
+				Comparison::Equal | Comparison::GreaterOrEqual | Comparison::LessOrEqual,
+			) => VmVariant::TRUE,
+			(ord, Comparison::NotEqual) => VmVariant::Bool(ord != Ordering::Equal),
+			(Ordering::Greater, Comparison::Greater | Comparison::GreaterOrEqual) => {
+				VmVariant::TRUE
+			}
+			(Ordering::Less, Comparison::Less | Comparison::LessOrEqual) => VmVariant::TRUE,
+			_ => VmVariant::FALSE,
 		})
 	}
 

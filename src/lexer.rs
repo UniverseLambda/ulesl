@@ -248,7 +248,7 @@ where
 			};
 		}
 
-		if (buff.starts_with('>') || buff.starts_with('<')) && c == '=' {
+		if (buff.starts_with('>') || buff.starts_with('<') || buff.starts_with('!')) && c == '=' {
 			buff.push(c);
 			return Ok(false);
 		}
@@ -377,10 +377,10 @@ where
 // TODO: Lexer: probably more operators?
 fn is_operator(c: char) -> bool {
 	match c {
-		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}' | '[' | ']'
+		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}' | '[' | ']' | '!' | '>' | '<'
 		// '+' | '-' | '*' | '/'
 			// | '.'
-			// | '>' | '<' | '|' | '&'
+			// | '|' | '&'
 			// | '?' | ':'
 			// | ';' | '(' | ')' | '[' | ']' | '{' | '}'
 			=> true,

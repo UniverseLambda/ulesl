@@ -4,7 +4,7 @@ use std::{
 	rc::Rc,
 };
 
-use crate::parser::{self, types::Comparison};
+use crate::parser;
 
 use super::{
 	error::{VmError, VmResult},
@@ -30,6 +30,9 @@ impl<T: IntoVariant> From<T> for VmVariant {
 }
 
 impl VmVariant {
+	pub const TRUE: Self = Self::Bool(true);
+	pub const FALSE: Self = Self::Bool(false);
+
 	pub fn new_from_string_expr(str: &str) -> VmResult<Self> {
 		let trimmed_str = &str[1..(str.len() - 1)];
 		let mut res_str = String::with_capacity(trimmed_str.len());

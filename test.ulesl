@@ -3,13 +3,25 @@
 let its_a_var = 5;
 # var its_another_var = exec();
 
-if true {
-	println("PRINTED");
-}
+# Testing conditions
+if true { println("PRINTED"); }
+if false { println("NOT PRINTED"); }
 
-if false {
-	println("NOT PRINTED");
-}
+# Testing comparison operators
+
+## Everything should be printed here
+if 5 == 5 { println("IT WORKS 0"); }
+if 1 < 5 { println("IT WORKS 1"); }
+if 5 > 1 { println("IT WORKS 2"); }
+if 5 >= 5 { println("IT WORKS 3"); }
+if 5 <= 5 { println("IT WORKS 4"); }
+
+## Nothing should be printed here
+if 5 != 5 { println("NOT WORKING 0"); }
+if 5 > 5 { println("NOT WORKING 1"); }
+if 5 >= 6 { println("NOT WORKING 2"); }
+if 6 < 5 { println("NOT WORKING 3"); }
+if 6 <= 5 { println("NOT WORKING 4"); }
 
 println(its_a_var);
 
