@@ -11,7 +11,7 @@ use self::error::{ParserError, Result};
 
 pub struct Parser<T: Read> {
 	lexer: Lexer<T>,
-	source: String,
+	_source: String,
 	current_token: Option<Token>,
 	lookahead_token: Option<Token>,
 	retain_last_token: bool,
@@ -21,7 +21,7 @@ impl<T: Read> Parser<T> {
 	pub fn new(lexer: Lexer<T>, source: String) -> Self {
 		Self {
 			lexer,
-			source,
+			_source: source,
 			current_token: None,
 			lookahead_token: None,
 			retain_last_token: false,
@@ -408,5 +408,8 @@ impl<T: Read> Parser<T> {
 
 #[inline]
 fn is_binary_expr_operator(token: &str) -> bool {
-	matches!(token, "==" | "<=" | ">=" | ">" | "<" | "!=" | "||" | "&&")
+	matches!(
+		token,
+		"==" | "<=" | ">=" | ">" | "<" | "!=" | "||" | "&&" | "+" | "-" | "*" | "/"
+	)
 }

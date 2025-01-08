@@ -16,7 +16,8 @@ impl Display for VmError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self.context.as_ref() {
 			VmErrorContext::Internal => "vm_internals".fmt(f)?,
-			VmErrorContext::Location { location } | VmErrorContext::FuncCall { location, .. } => {
+			/* VmErrorContext::Location { location } |*/
+			VmErrorContext::FuncCall { location, .. } => {
 				location.file().fmt(f)?;
 				':'.fmt(f)?;
 				location.line().fmt(f)?;
@@ -55,17 +56,17 @@ impl VmError {
 		}
 	}
 
-	pub fn with_context_internal(mut self) -> Self {
-		self.context = Box::from(VmErrorContext::Internal);
+	// pub fn with_context_internal(mut self) -> Self {
+	// 	self.context = Box::from(VmErrorContext::Internal);
 
-		self
-	}
+	// 	self
+	// }
 
-	pub fn with_context_location(mut self, location: Location) -> Self {
-		self.context = Box::from(VmErrorContext::Location { location });
+	// pub fn with_context_location(mut self, location: Location) -> Self {
+	// 	self.context = Box::from(VmErrorContext::Location { location });
 
-		self
-	}
+	// 	self
+	// }
 
 	pub fn with_context_func_call(mut self, location: Location, func_name: String) -> Self {
 		self.context = Box::new(VmErrorContext::FuncCall {
@@ -139,15 +140,15 @@ impl VmError {
 		}
 	}
 
-	pub fn invalid_string(raw_string: String, invalid_char_idx: usize) -> Self {
-		Self {
-			err_type: VmErrorType::InvalidString {
-				raw_string,
-				invalid_char_idx,
-			},
-			context: Box::default(),
-		}
-	}
+	// pub fn invalid_string(raw_string: String, invalid_char_idx: usize) -> Self {
+	// 	Self {
+	// 		err_type: VmErrorType::InvalidString {
+	// 			raw_string,
+	// 			invalid_char_idx,
+	// 		},
+	// 		context: Box::default(),
+	// 	}
+	// }
 
 	pub fn invalid_escape(raw_string: String, invalid_escape_idx: usize) -> Self {
 		Self {
@@ -166,9 +167,9 @@ pub enum VmErrorContext {
 	#[default]
 	Internal,
 	/* Minimal context, we just know it was emitted when evaluating a package */
-	Location {
-		location: Location,
-	},
+	// Location {
+	// 	location: Location,
+	// },
 	/* Full known context, we know the error was emitted when trying to call a function */
 	FuncCall {
 		location: Location,
@@ -191,11 +192,11 @@ pub enum VmErrorType {
 	TooMuchArgs { expected: usize, got: usize },
 	#[error("unexpected type (expected {expected}, got {got})")]
 	InvalidValueType { expected: String, got: String },
-	#[error("invalid string value: invalid char at {invalid_char_idx}")]
-	InvalidString {
-		raw_string: String,
-		invalid_char_idx: usize,
-	},
+	// #[error("invalid string value: invalid char at {invalid_char_idx}")]
+	// InvalidString {
+	// 	raw_string: String,
+	// 	invalid_char_idx: usize,
+	// },
 	#[error("invalid string value: invalid escape sequence at {invalid_escape_idx}")]
 	InvalidEscape {
 		raw_string: String,
@@ -209,21 +210,21 @@ pub enum VmErrorType {
 }
 
 pub trait VmResultExt {
-	fn with_context_internal(self) -> Self;
-	fn with_context_location(self, location: Location) -> Self;
+	// fn with_context_internal(self) -> Self;
+	// fn with_context_location(self, location: Location) -> Self;
 	fn with_context_func_call(self, location: Location, func_name: String) -> Self;
 	fn with_context_func_arg(self, location: Location, func_name: String, arg_name: String)
 		-> Self;
 }
 
 impl<T> VmResultExt for VmResult<T> {
-	fn with_context_internal(self) -> Self {
-		self.map_err(VmError::with_context_internal)
-	}
+	// fn with_context_internal(self) -> Self {
+	// 	self.map_err(VmError::with_context_internal)
+	// }
 
-	fn with_context_location(self, location: Location) -> Self {
-		self.map_err(|v| v.with_context_location(location))
-	}
+	// fn with_context_location(self, location: Location) -> Self {
+	// 	self.map_err(|v| v.with_context_location(location))
+	// }
 
 	fn with_context_func_call(self, location: Location, func_name: String) -> Self {
 		self.map_err(|v| v.with_context_func_call(location, func_name))

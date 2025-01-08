@@ -10,7 +10,7 @@ pub trait VmTypable {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum VmType {
-	Vary,
+	// Vary,
 	Unit,
 	Bool,
 	Integer,

@@ -36,6 +36,13 @@ println("false:", false && true);
 println("false:", true && false);
 println("false:", false && false);
 
+println("2 + 1 =", 2 + 1);
+println("2 - 1 =", 2 - 1);
+println("2 * 1 =", 2 * 1);
+println("2 / 1 =", 2 / 1);
+
+println("0 - 1 =", 0 - 1);
+
 its_a_var = "MDR";
 
 fn my_func() {
@@ -46,9 +53,6 @@ fn my_func_with_param(param) {
 	println("param:", param);
 }
 
-exec(["pipe"], "echo", "hello");
-exec(["no_status"], "grep", "BONCHOUR");
-
 println("Hahahaha");
 
 my_func();
@@ -56,3 +60,6 @@ my_func();
 println("Nope");
 my_func();
 my_func_with_param(its_a_var);
+
+exec(["pipe"], "echo", "hello");
+exec(["no_status"], "grep", "BONCHOUR");

@@ -4,7 +4,7 @@ use crate::{
 	common::Location,
 	parser::types::{
 		ArrayExpr, BinaryExpr, BinaryOp, BooleanOperation, Comparison, Expr, FuncCallExpr,
-		FuncDecl, IfStatement, LocatedType, ParsedHighLevel, VarAssign,
+		FuncDecl, IfStatement, LocatedType, NumericalOperation, ParsedHighLevel, VarAssign,
 	},
 };
 
@@ -88,13 +88,13 @@ impl Vm {
 		}
 	}
 
-	fn get_scope_mut(&mut self) -> &mut Scope {
-		if let Some(local_scope) = self.stack_scope.as_mut() {
-			local_scope
-		} else {
-			&mut self.global_scope
-		}
-	}
+	// fn get_scope_mut(&mut self) -> &mut Scope {
+	// 	if let Some(local_scope) = self.stack_scope.as_mut() {
+	// 		local_scope
+	// 	} else {
+	// 		&mut self.global_scope
+	// 	}
+	// }
 
 	pub fn exec_package(
 		&mut self,
@@ -214,6 +214,12 @@ impl Vm {
 				self.eval_comparison(op, left, right)
 			}
 			BinaryOp::Bool(op) => self.eval_bool_op(op, *expr.left, *expr.right),
+			BinaryOp::Numerical(op) => {
+				let left = self.eval_expr(*expr.left)?;
+				let right = self.eval_expr(*expr.right)?;
+
+				self.eval_numerical_op(op, left, right)
+			}
 		}
 	}
 
@@ -259,6 +265,23 @@ impl Vm {
 				.map(VmVariant::Bool),
 			(BooleanOperation::Or, v) | (BooleanOperation::And, v) => Ok(VmVariant::Bool(v)),
 		}
+	}
+
+	fn eval_numerical_op(
+		&mut self,
+		op: NumericalOperation,
+		left: VmVariant,
+		right: VmVariant,
+	) -> VmResult<VmVariant> {
+		let left: i64 = left.try_native()?;
+		let right: i64 = right.try_native()?;
+
+		Ok(VmVariant::from(match op {
+			NumericalOperation::Add => left + right,
+			NumericalOperation::Sub => left - right,
+			NumericalOperation::Mul => left * right,
+			NumericalOperation::Div => left / right,
+		}))
 	}
 
 	pub fn new_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {

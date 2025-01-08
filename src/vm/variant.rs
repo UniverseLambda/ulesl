@@ -1,7 +1,6 @@
 use std::{
 	cmp::Ordering,
 	fmt::{Display, Write},
-	rc::Rc,
 };
 
 use crate::parser;
@@ -20,7 +19,7 @@ pub enum VmVariant {
 	// ReadStream(Box<dyn Read>),
 	// WriteStream(Box<dyn Write>),
 	Array(Vec<VmVariant>),
-	Ref(Rc<VmVariant>),
+	// Ref(Rc<VmVariant>),
 }
 
 impl<T: IntoVariant> From<T> for VmVariant {
@@ -78,7 +77,7 @@ impl VmVariant {
 			(Self::Unit, Self::Unit) => Some(Ordering::Equal),
 			(Self::Bool(a), Self::Bool(b)) => Some(a.cmp(b)),
 			(Self::Integer(a), Self::Integer(b)) => Some(a.cmp(b)),
-			(Self::Ref(a), Self::Ref(b)) => a.compare(b),
+			// (Self::Ref(a), Self::Ref(b)) => a.compare(b),
 			(Self::String(a), Self::String(b)) => Some(a.cmp(b)),
 			_ => None,
 		}
@@ -111,7 +110,7 @@ impl VmTypable for VmVariant {
 			VmVariant::Integer(_) => VmType::Integer,
 			VmVariant::String(_) => VmType::String,
 			VmVariant::Array(_) => VmType::Array,
-			VmVariant::Ref(_) => todo!(),
+			// VmVariant::Ref(_) => todo!(),
 		}
 	}
 }
@@ -153,8 +152,7 @@ impl Display for VmVariant {
 				}
 
 				f.write_char(']')
-			}
-			VmVariant::Ref(v) => v.fmt(f),
+			} // VmVariant::Ref(v) => v.fmt(f),
 		}
 	}
 }
@@ -162,12 +160,12 @@ impl Display for VmVariant {
 pub trait IntoVariant {
 	fn into_variant(self) -> VmVariant;
 
-	fn clone_into_variant(&self) -> VmVariant
-	where
-		Self: Clone,
-	{
-		self.clone().into_variant()
-	}
+	// fn clone_into_variant(&self) -> VmVariant
+	// where
+	// 	Self: Clone,
+	// {
+	// 	self.clone().into_variant()
+	// }
 }
 
 impl IntoVariant for String {
@@ -199,9 +197,9 @@ impl IntoVariant for () {
 		VmVariant::Unit
 	}
 
-	fn clone_into_variant(&self) -> VmVariant {
-		VmVariant::Unit
-	}
+	// fn clone_into_variant(&self) -> VmVariant {
+	// 	VmVariant::Unit
+	// }
 }
 
 impl<T: IntoVariant, const N: usize> IntoVariant for [T; N] {
@@ -263,9 +261,9 @@ macro_rules! into_variant_num {
 				VmVariant::Integer(self as i64)
 			}
 
-			fn clone_into_variant(&self) -> VmVariant {
-				VmVariant::Integer((*self) as i64)
-			}
+			// fn clone_into_variant(&self) -> VmVariant {
+			// 	VmVariant::Integer((*self) as i64)
+			// }
 		}
 	)*
 	};

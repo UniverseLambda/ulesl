@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::Debug, str::FromStr};
+use std::fmt::Debug;
 
 use crate::{common::Location, lexer::Token};
 
@@ -48,6 +48,7 @@ pub struct BinaryExpr {
 pub enum BinaryOp {
 	Compare(Comparison),
 	Bool(BooleanOperation),
+	Numerical(NumericalOperation),
 }
 
 #[derive(Debug, Clone)]
@@ -66,9 +67,21 @@ impl TryFrom<Token> for BinaryOp {
 			">=" => Ok(Self::Compare(Comparison::GreaterOrEqual)),
 			"||" => Ok(Self::Bool(BooleanOperation::Or)),
 			"&&" => Ok(Self::Bool(BooleanOperation::And)),
+			"+" => Ok(Self::Numerical(NumericalOperation::Add)),
+			"-" => Ok(Self::Numerical(NumericalOperation::Sub)),
+			"*" => Ok(Self::Numerical(NumericalOperation::Mul)),
+			"/" => Ok(Self::Numerical(NumericalOperation::Div)),
 			_ => Err(OperatorNotComparator(s)),
 		}
 	}
+}
+
+#[derive(Debug, Clone)]
+pub enum NumericalOperation {
+	Add,
+	Sub,
+	Mul,
+	Div,
 }
 
 #[derive(Debug, Clone)]
