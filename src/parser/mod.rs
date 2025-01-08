@@ -209,14 +209,13 @@ impl<T: Read> Parser<T> {
 	fn parse_binary_expr(&mut self, first_expr: Expr) -> Result<Expr> {
 		let current_token = self.next_or_fail()?;
 
-		let cmp_op: Comparison = current_token.try_into()?;
-
+		let op: BinaryOp = current_token.try_into()?;
 		let second_expr = self.parse_expr()?;
 
-		Ok(Expr::Compare(CompareExpr {
+		Ok(Expr::Binary(BinaryExpr {
 			left: Box::new(first_expr),
 			right: Box::new(second_expr),
-			comparison: cmp_op,
+			op,
 		}))
 	}
 
@@ -409,5 +408,5 @@ impl<T: Read> Parser<T> {
 
 #[inline]
 fn is_binary_expr_operator(token: &str) -> bool {
-	matches!(token, "==" | "<=" | ">=" | ">" | "<" | "!=")
+	matches!(token, "==" | "<=" | ">=" | ">" | "<" | "!=" | "||" | "&&")
 }

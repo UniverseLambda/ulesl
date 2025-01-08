@@ -25,6 +25,17 @@ if 6 <= 5 { println("NOT WORKING 4"); }
 
 println(its_a_var);
 
+println(5 == 5);
+
+println("true: ", true || true);
+println("true: ", false || true);
+println("true: ", true || false);
+println("false:", false || false);
+println("true: ", true && true);
+println("false:", false && true);
+println("false:", true && false);
+println("false:", false && false);
+
 its_a_var = "MDR";
 
 fn my_func() {

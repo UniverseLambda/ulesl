@@ -125,7 +125,7 @@ impl From<parser::types::Expr> for VmVariant {
 			parser::types::Expr::Array(_) => unimplemented!(),
 			parser::types::Expr::Identifier(_) => unimplemented!(),
 			parser::types::Expr::FuncCall(_) => unimplemented!(),
-			parser::types::Expr::Compare(_) => unimplemented!(),
+			parser::types::Expr::Binary(_) => unimplemented!(),
 		}
 	}
 }

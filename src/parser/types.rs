@@ -38,10 +38,44 @@ pub struct ArrayExpr {
 }
 
 #[derive(Debug, Clone)]
-pub struct CompareExpr {
+pub struct BinaryExpr {
 	pub left: Box<Expr>,
 	pub right: Box<Expr>,
-	pub comparison: Comparison,
+	pub op: BinaryOp,
+}
+
+#[derive(Debug, Clone)]
+pub enum BinaryOp {
+	Compare(Comparison),
+	Bool(BooleanOperation),
+}
+
+#[derive(Debug, Clone)]
+pub struct OperatorNotComparator(pub Token);
+
+impl TryFrom<Token> for BinaryOp {
+	type Error = OperatorNotComparator;
+
+	fn try_from(s: Token) -> Result<Self, OperatorNotComparator> {
+		match s.content.as_str() {
+			"==" => Ok(Self::Compare(Comparison::Equal)),
+			"!=" => Ok(Self::Compare(Comparison::NotEqual)),
+			"<" => Ok(Self::Compare(Comparison::Less)),
+			">" => Ok(Self::Compare(Comparison::Greater)),
+			"<=" => Ok(Self::Compare(Comparison::LessOrEqual)),
+			">=" => Ok(Self::Compare(Comparison::GreaterOrEqual)),
+			"||" => Ok(Self::Bool(BooleanOperation::Or)),
+			"&&" => Ok(Self::Bool(BooleanOperation::And)),
+			_ => Err(OperatorNotComparator(s)),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum BooleanOperation {
+	Or,
+	And,
+	// Xor,
 }
 
 #[derive(Debug, Clone)]
@@ -52,25 +86,6 @@ pub enum Comparison {
 	NotEqual,
 	GreaterOrEqual,
 	Greater,
-}
-
-#[derive(Debug, Clone)]
-pub struct OperatorNotComparator(pub Token);
-
-impl TryFrom<Token> for Comparison {
-	type Error = OperatorNotComparator;
-
-	fn try_from(s: Token) -> Result<Self, OperatorNotComparator> {
-		match s.content.as_str() {
-			"==" => Ok(Self::Equal),
-			"!=" => Ok(Self::NotEqual),
-			"<" => Ok(Self::Less),
-			">" => Ok(Self::Greater),
-			"<=" => Ok(Self::LessOrEqual),
-			">=" => Ok(Self::GreaterOrEqual),
-			_ => Err(OperatorNotComparator(s)),
-		}
-	}
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +116,7 @@ pub enum Expr {
 	Identifier(String),
 	FuncCall(FuncCallExpr),
 	Array(ArrayExpr),
-	Compare(CompareExpr),
+	Binary(BinaryExpr),
 }
 
 #[derive(Debug, Clone)]

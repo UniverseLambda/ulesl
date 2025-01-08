@@ -3,8 +3,8 @@ use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 use crate::{
 	common::Location,
 	parser::types::{
-		ArrayExpr, CompareExpr, Comparison, Expr, FuncCallExpr, FuncDecl, IfStatement, LocatedType,
-		ParsedHighLevel, VarAssign,
+		ArrayExpr, BinaryExpr, BinaryOp, BooleanOperation, Comparison, Expr, FuncCallExpr,
+		FuncDecl, IfStatement, LocatedType, ParsedHighLevel, VarAssign,
 	},
 };
 
@@ -201,13 +201,28 @@ impl Vm {
 			Expr::Identifier(var_name) => self.get_variable(&var_name)?,
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
 			Expr::Array(array_data) => self.eval_array(array_data)?,
-			Expr::Compare(compare_data) => self.eval_comparison(compare_data)?,
+			Expr::Binary(compare_data) => self.eval_binary_expr(compare_data)?,
 		})
 	}
 
-	fn eval_comparison(&mut self, expr: CompareExpr) -> VmResult<VmVariant> {
-		let left = self.eval_expr(*expr.left)?;
-		let right = self.eval_expr(*expr.right)?;
+	fn eval_binary_expr(&mut self, expr: BinaryExpr) -> VmResult<VmVariant> {
+		match expr.op {
+			BinaryOp::Compare(op) => {
+				let left = self.eval_expr(*expr.left)?;
+				let right = self.eval_expr(*expr.right)?;
+
+				self.eval_comparison(op, left, right)
+			}
+			BinaryOp::Bool(op) => self.eval_bool_op(op, *expr.left, *expr.right),
+		}
+	}
+
+	fn eval_comparison(
+		&mut self,
+		op: Comparison,
+		left: VmVariant,
+		right: VmVariant,
+	) -> VmResult<VmVariant> {
 		let Some(ord) = left.compare(&right) else {
 			return Err(VmError::new(VmErrorType::InvalidComparison {
 				left_type: left.get_typeinfo().to_string(),
@@ -215,7 +230,7 @@ impl Vm {
 			}));
 		};
 
-		Ok(match (ord, expr.comparison) {
+		Ok(match (ord, op) {
 			(
 				Ordering::Equal,
 				Comparison::Equal | Comparison::GreaterOrEqual | Comparison::LessOrEqual,
@@ -227,6 +242,23 @@ impl Vm {
 			(Ordering::Less, Comparison::Less | Comparison::LessOrEqual) => VmVariant::TRUE,
 			_ => VmVariant::FALSE,
 		})
+	}
+
+	fn eval_bool_op(
+		&mut self,
+		op: BooleanOperation,
+		left: Expr,
+		right: Expr,
+	) -> VmResult<VmVariant> {
+		let left: bool = self.eval_expr(left)?.try_native()?;
+
+		match (op, left) {
+			(BooleanOperation::Or, false) | (BooleanOperation::And, true) => self
+				.eval_expr(right)?
+				.try_native::<bool>()
+				.map(VmVariant::Bool),
+			(BooleanOperation::Or, v) | (BooleanOperation::And, v) => Ok(VmVariant::Bool(v)),
+		}
 	}
 
 	pub fn new_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {
