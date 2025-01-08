@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+	collections::{HashMap, HashSet},
+	fmt::Debug,
+};
 
 use crate::{common::Location, lexer::Token};
 
@@ -116,6 +119,18 @@ pub struct FuncDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct StructDecl {
+	pub name: String,
+	pub vars: HashSet<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructInstanceExpr {
+	pub name: String,
+	pub vars_init: HashMap<String, Expr>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StatementBlock {
 	pub statements: Vec<LocatedType<ParsedHighLevel>>,
 	// pub ret_type: VmType,
@@ -130,6 +145,7 @@ pub enum Expr {
 	FuncCall(FuncCallExpr),
 	Array(ArrayExpr),
 	Binary(BinaryExpr),
+	StructInstance(StructInstanceExpr),
 }
 
 #[derive(Debug, Clone)]
@@ -140,4 +156,5 @@ pub enum ParsedHighLevel {
 	FuncDecl(FuncDecl),
 	FuncCall(FuncCallExpr),
 	If(IfStatement),
+	StructDecl(StructDecl),
 }

@@ -93,9 +93,30 @@ impl VmError {
 		self
 	}
 
+	pub fn missing_struct_member(name: String) -> Self {
+		Self {
+			err_type: VmErrorType::MissingStructMember(name),
+			context: Box::default(),
+		}
+	}
+
+	pub fn unknown_struct_member(name: String) -> Self {
+		Self {
+			err_type: VmErrorType::UnknownStructMember(name),
+			context: Box::default(),
+		}
+	}
+
 	pub fn unknown_identifier(name: String) -> Self {
 		Self {
 			err_type: VmErrorType::UnknownIdentifier(name),
+			context: Box::default(),
+		}
+	}
+
+	pub fn struct_name_dup(name: String) -> Self {
+		Self {
+			err_type: VmErrorType::StructNameDuplicate(name),
 			context: Box::default(),
 		}
 	}
@@ -186,6 +207,12 @@ pub enum VmErrorType {
 	FuncNameDuplicate(String),
 	#[error("duplicate variable: {0}")]
 	VarNameDuplicate(String),
+	#[error("duplicate struct: {0}")]
+	StructNameDuplicate(String),
+	#[error("missing struct member: {0}")]
+	MissingStructMember(String),
+	#[error("unknown struct member: {0}")]
+	UnknownStructMember(String),
 	#[error("not enough argument (expected {expected}, got {got})")]
 	NotEnoughArg { expected: usize, got: usize },
 	#[error("too many arguments (expected {expected}, got {got})")]

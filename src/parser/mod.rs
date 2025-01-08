@@ -1,4 +1,7 @@
-use std::io::Read;
+use std::{
+	collections::{HashMap, HashSet},
+	io::Read,
+};
 
 pub mod error;
 pub mod types;
@@ -46,6 +49,7 @@ impl<T: Read> Parser<T> {
 				"let" => ParsedHighLevel::VarDecl(self.parse_var_decl_or_assign()?),
 				"fn" => ParsedHighLevel::FuncDecl(self.parse_func_decl()?),
 				"if" => ParsedHighLevel::If(self.parse_if_statement()?),
+				"struct" => ParsedHighLevel::StructDecl(self.parse_struct_decl()?),
 				_ => {
 					return self.unexpected_token(
 						self.current_token.clone().unwrap(),
@@ -87,6 +91,36 @@ impl<T: Read> Parser<T> {
 		};
 
 		Ok(Some(LocatedType::new(high_level, location)))
+	}
+
+	fn parse_struct_decl(&mut self) -> Result<StructDecl> {
+		let struct_keyword = self.next_or_fail()?;
+		self.expect_token(&struct_keyword, TokenType::Keyword, "struct")?;
+
+		let struct_name = self.next_or_fail()?;
+		self.expect_token_type(&struct_name, TokenType::Identifier)?;
+
+		// println!("[VM DEBUG] parsing struct {}", struct_name.content);
+
+		let struct_open = self.next_or_fail()?;
+		self.expect_token(&struct_open, TokenType::Operator, "{")?;
+
+		let mut unchecked_vars = self.parse_arg_list("}")?;
+
+		let mut vars = HashSet::new();
+
+		for var in unchecked_vars.drain(..) {
+			if !vars.insert(var.clone()) {
+				return Err(ParserError::DuplicateStructMember(var));
+			}
+		}
+
+		// println!("[VM DEBUG] done parsing struct {}", struct_name.content);
+
+		Ok(StructDecl {
+			name: struct_name.content,
+			vars,
+		})
 	}
 
 	fn parse_var_decl_or_assign(&mut self) -> Result<VarAssign> {
@@ -151,7 +185,7 @@ impl<T: Read> Parser<T> {
 	}
 
 	fn parse_expr(&mut self) -> Result<Expr> {
-		// TODO: extended expressions (calculs, etc...)
+		// TODO: extended expressions (binary, bit manipulation, etc...)
 
 		if let TokenType::Identifier = self.peek_or_fail()?.token_type {
 			return self.parse_branch_identifier_expr();
@@ -199,8 +233,8 @@ impl<T: Read> Parser<T> {
 				name: identifier.content,
 				args,
 			}))
-		} else if is_binary_expr_operator(&peeked.content) {
-			todo!()
+		} else if peeked.content == "{" {
+			self.parse_struct_instanciation_expr(identifier.content)
 		} else {
 			Ok(Expr::Identifier(identifier.content))
 		}
@@ -250,11 +284,49 @@ impl<T: Read> Parser<T> {
 		Ok(exprs)
 	}
 
+	fn parse_struct_instanciation_expr(&mut self, name: String) -> Result<Expr> {
+		let mut vars_init: HashMap<String, Expr> = HashMap::new();
+
+		let instance_open = self.next_or_fail()?;
+		self.expect_token(&instance_open, TokenType::Operator, "{")?;
+
+		loop {
+			let next_token = self.peek_or_fail()?;
+
+			if TokenType::Operator == next_token.token_type && next_token.content == "}" {
+				self.advance_token()?;
+				break;
+			}
+
+			let field = self.next_or_fail()?;
+			self.expect_token_type(&field, TokenType::Identifier)?;
+
+			let separator = self.next_or_fail()?;
+			self.expect_token(&separator, TokenType::Operator, ":")?;
+
+			let value = self.parse_expr()?;
+
+			if vars_init.insert(field.content, value).is_some() {
+				return Err(ParserError::DuplicateStructMember(name));
+			}
+
+			let end_token = self.next_or_fail()?;
+			if TokenType::Operator == end_token.token_type && end_token.content == "}" {
+				break;
+			}
+
+			self.expect_token(&end_token, TokenType::Operator, ",")?;
+		}
+
+		Ok(Expr::StructInstance(StructInstanceExpr { name, vars_init }))
+	}
+
 	fn parse_arg_list(&mut self, end_operator: &str) -> Result<Vec<String>> {
 		let mut idents: Vec<String> = Vec::new();
 
 		loop {
 			let next_token = self.next_or_fail()?;
+			// println!("[VM DEBUG] next_token: {next_token:?}");
 
 			if TokenType::Operator == next_token.token_type && next_token.content == end_operator {
 				break;
@@ -265,6 +337,7 @@ impl<T: Read> Parser<T> {
 			idents.push(next_token.content);
 
 			let end_token = self.next_or_fail()?;
+			// println!("[VM DEBUG] end_token: {end_token:?}");
 
 			if TokenType::Operator == end_token.token_type && end_token.content == end_operator {
 				break;

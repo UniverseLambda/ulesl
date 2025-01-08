@@ -1,10 +1,15 @@
-use std::{cmp::Ordering, collections::HashMap, rc::Rc};
+use std::{
+	cmp::Ordering,
+	collections::{HashMap, HashSet},
+	rc::Rc,
+};
 
 use crate::{
 	common::Location,
 	parser::types::{
 		ArrayExpr, BinaryExpr, BinaryOp, BooleanOperation, Comparison, Expr, FuncCallExpr,
-		FuncDecl, IfStatement, LocatedType, NumericalOperation, ParsedHighLevel, VarAssign,
+		FuncDecl, IfStatement, LocatedType, NumericalOperation, ParsedHighLevel, StructDecl,
+		StructInstanceExpr, VarAssign,
 	},
 };
 
@@ -31,9 +36,15 @@ struct FunctionData {
 	// return_type: VmType,
 }
 
+struct StructData {
+	vars: HashSet<String>,
+	// return_type: VmType,
+}
+
 struct Scope {
 	variables: HashMap<String, VmVariant>,
 	functions: HashMap<String, Rc<FunctionData>>,
+	structs: HashMap<String, Rc<StructData>>,
 	caller: Location,
 }
 
@@ -42,6 +53,7 @@ impl Scope {
 		Scope {
 			variables: HashMap::new(),
 			functions: HashMap::new(),
+			structs: HashMap::new(),
 			caller: Location::new_z(0, 0, "_vm".into()),
 		}
 	}
@@ -50,6 +62,7 @@ impl Scope {
 		Scope {
 			variables: HashMap::new(),
 			functions: HashMap::new(),
+			structs: HashMap::new(),
 			caller,
 		}
 	}
@@ -88,13 +101,13 @@ impl Vm {
 		}
 	}
 
-	// fn get_scope_mut(&mut self) -> &mut Scope {
-	// 	if let Some(local_scope) = self.stack_scope.as_mut() {
-	// 		local_scope
-	// 	} else {
-	// 		&mut self.global_scope
-	// 	}
-	// }
+	fn get_scope_mut(&mut self) -> &mut Scope {
+		if let Some(local_scope) = self.stack_scope.as_mut() {
+			local_scope
+		} else {
+			&mut self.global_scope
+		}
+	}
 
 	pub fn exec_package(
 		&mut self,
@@ -119,6 +132,9 @@ impl Vm {
 					Option::None
 				}
 			})?,
+			ParsedHighLevel::StructDecl(struct_decl) => {
+				self.eval_struct_decl(struct_decl).map(|_| None)?
+			}
 			ParsedHighLevel::FuncDecl(func_decl) => {
 				self.eval_func_decl(func_decl).map(|_| Option::None)?
 			}
@@ -147,12 +163,22 @@ impl Vm {
 		self.call_func(func_call_expr.name, params)
 	}
 
+	fn eval_struct_decl(&mut self, decl: StructDecl) -> VmResult<()> {
+		let scope = self.get_scope_mut();
+
+		if scope.structs.contains_key(&decl.name) {
+			return Err(VmError::struct_name_dup(decl.name));
+		}
+
+		scope
+			.structs
+			.insert(decl.name, Rc::new(StructData { vars: decl.vars }));
+
+		Ok(())
+	}
+
 	fn eval_func_decl(&mut self, func_decl: FuncDecl) -> VmResult<()> {
-		let scope = if let Some(scope) = self.stack_scope.as_mut() {
-			scope
-		} else {
-			&mut self.global_scope
-		};
+		let scope = self.get_scope_mut();
 
 		let (name, func_data) = func_decl.into();
 
@@ -193,6 +219,29 @@ impl Vm {
 		Ok(VmVariant::Array(elems))
 	}
 
+	fn eval_struct_instance(
+		&mut self,
+		mut struct_instance: StructInstanceExpr,
+	) -> VmResult<VmVariant> {
+		let struct_data = self.get_struct_data(&struct_instance.name)?;
+
+		let mut members = HashMap::new();
+
+		for field in struct_data.vars.iter().cloned() {
+			let Some(field_expr) = struct_instance.vars_init.remove(&field) else {
+				return Err(VmError::missing_struct_member(field));
+			};
+
+			members.insert(field, self.eval_expr(field_expr)?);
+		}
+
+		if let Some(field) = struct_instance.vars_init.iter().next() {
+			return Err(VmError::unknown_struct_member(field.0.clone()));
+		}
+
+		Ok(VmVariant::Struct(members))
+	}
+
 	fn eval_expr(&mut self, expr: Expr) -> VmResult<VmVariant> {
 		Ok(match expr {
 			Expr::IntLiteral(v) => VmVariant::Integer(v),
@@ -202,6 +251,7 @@ impl Vm {
 			Expr::FuncCall(call_data) => self.eval_func_call(call_data)?,
 			Expr::Array(array_data) => self.eval_array(array_data)?,
 			Expr::Binary(compare_data) => self.eval_binary_expr(compare_data)?,
+			Expr::StructInstance(struct_instance) => self.eval_struct_instance(struct_instance)?,
 		})
 	}
 
@@ -330,12 +380,20 @@ impl Vm {
 		Ok(())
 	}
 
-	pub fn get_variable(&self, var_name: &String) -> VmResult<VmVariant> {
-		let scope = if let Some(scope) = self.stack_scope.as_ref() {
-			scope
+	fn get_struct_data(&self, struct_name: &String) -> VmResult<Rc<StructData>> {
+		let scope = self.get_scope();
+
+		// TODO: Also check global scope if stack_scope does not have it.
+
+		if let Some(val) = scope.structs.get(struct_name) {
+			Ok(val.clone())
 		} else {
-			&self.global_scope
-		};
+			Err(VmError::unknown_identifier(struct_name.clone()))
+		}
+	}
+
+	pub fn get_variable(&self, var_name: &String) -> VmResult<VmVariant> {
+		let scope = self.get_scope();
 
 		// TODO: Also check global scope if stack_scope
 

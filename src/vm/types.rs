@@ -18,6 +18,7 @@ pub enum VmType {
 	// ReadStream,
 	// WriteStream,
 	Array,
+	Struct,
 }
 
 impl Display for VmType {

@@ -18,6 +18,8 @@ pub enum ParserError {
 	IntegerParsing(String, Option<ParseIntError>),
 	#[error("Unexpected End of File")]
 	UnexpectedEndOfFile,
+	#[error("Duplicate struct member: \"{0}\"")]
+	DuplicateStructMember(String),
 }
 
 impl From<(String, ParseIntError)> for ParserError {

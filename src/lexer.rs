@@ -258,13 +258,10 @@ where
 
 	fn finalize_word(&mut self, buff: &str) -> Result<Token, Error> {
 		let tk_type = match buff {
-			"let" => TokenType::Keyword,
-			"fn" => TokenType::Keyword,
-			"if" => TokenType::Keyword,
+			"let" | "fn" | "if" | "struct" => TokenType::Keyword,
 			"true" | "false" => TokenType::BoolLiteral,
-			// Not yet ready... SO DON'T YOU DARE USE IT YOU FILTHY MONSTER
-			"@include" => TokenType::SpecialInstruction,
-			"@exec" => TokenType::SpecialInstruction,
+			/* @include: Not yet ready... SO DON'T YOU DARE USE IT YOU FILTHY MONSTER */
+			"@include" | "@exec" => TokenType::SpecialInstruction,
 			v if v.starts_with('@') => {
 				return Err(Error::UnknownSpecialInstruction(
 					self.curr_location.clone(),
@@ -377,12 +374,12 @@ where
 // TODO: Lexer: probably more operators?
 fn is_operator(c: char) -> bool {
 	match c {
-		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}' | '[' | ']' | '!' | '>' | '<' | '&' | '|'
-		| '+' | '-' | '*' | '/'
+		'=' | '(' | ')' | ';' | '#' | ',' | '{' | '}' | '[' | ']' | '!' | '>' | '<' | '&' | '|' |
+		    '+' | '-' | '*' | '/' |
+			':'
 			// | '.'
 			// | '|' | '&'
-			// | '?' | ':'
-			// | ';' | '(' | ')' | '[' | ']' | '{' | '}'
+			// | '?'
 			=> true,
 		_ => false
 	}

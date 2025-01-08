@@ -1,6 +1,7 @@
 use std::{
 	cmp::Ordering,
-	fmt::{Display, Write},
+	collections::HashMap,
+	fmt::{Display, Pointer, Write},
 };
 
 use crate::parser;
@@ -19,6 +20,9 @@ pub enum VmVariant {
 	// ReadStream(Box<dyn Read>),
 	// WriteStream(Box<dyn Write>),
 	Array(Vec<VmVariant>),
+	Struct(
+		HashMap<String, VmVariant>, /* TODO: Check if having an UID for structs to differentiate them at runtime is a good idea */
+	),
 	// Ref(Rc<VmVariant>),
 }
 
@@ -110,6 +114,7 @@ impl VmTypable for VmVariant {
 			VmVariant::Integer(_) => VmType::Integer,
 			VmVariant::String(_) => VmType::String,
 			VmVariant::Array(_) => VmType::Array,
+			VmVariant::Struct(_) => VmType::Struct,
 			// VmVariant::Ref(_) => todo!(),
 		}
 	}
@@ -121,6 +126,7 @@ impl From<parser::types::Expr> for VmVariant {
 			parser::types::Expr::IntLiteral(v) => Self::Integer(v),
 			parser::types::Expr::StringLiteral(v) => Self::String(v),
 			parser::types::Expr::BoolLiteral(v) => Self::Bool(v),
+			parser::types::Expr::StructInstance(_) => unimplemented!(),
 			parser::types::Expr::Array(_) => unimplemented!(),
 			parser::types::Expr::Identifier(_) => unimplemented!(),
 			parser::types::Expr::FuncCall(_) => unimplemented!(),
@@ -152,6 +158,26 @@ impl Display for VmVariant {
 				}
 
 				f.write_char(']')
+			}
+			VmVariant::Struct(members) => {
+				f.write_str("{ ")?;
+
+				let mut first = true;
+
+				for (member_name, member_value) in members {
+					if first {
+						first = false;
+					} else {
+						f.write_str(", ")?;
+					}
+
+					member_name.fmt(f)?;
+					f.write_str(": ")?;
+
+					member_value.fmt(f)?;
+				}
+
+				f.write_str(" }")
 			} // VmVariant::Ref(v) => v.fmt(f),
 		}
 	}

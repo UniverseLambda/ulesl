@@ -61,5 +61,23 @@ println("Nope");
 my_func();
 my_func_with_param(its_a_var);
 
+struct Empty {}
+
+struct Zarma {
+    zarma
+}
+
+let its_a_struct = Zarma {
+    zarma: 5
+};
+
+
+let its_a_struct_2 = Zarma {
+    zarma: -987
+};
+
+println("its_a_struct:", its_a_struct);
+println("its_a_struct_2:", its_a_struct_2);
+
 exec(["pipe"], "echo", "hello");
 exec(["no_status"], "grep", "BONCHOUR");
