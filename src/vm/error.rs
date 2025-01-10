@@ -114,6 +114,13 @@ impl VmError {
 		}
 	}
 
+	pub fn unsupported(desc: String) -> Self {
+		Self {
+			err_type: VmErrorType::Unsupported(desc),
+			context: Box::default(),
+		}
+	}
+
 	pub fn struct_name_dup(name: String) -> Self {
 		Self {
 			err_type: VmErrorType::StructNameDuplicate(name),
@@ -234,6 +241,10 @@ pub enum VmErrorType {
 		left_type: String,
 		right_type: String,
 	},
+	#[error("type not referencable: {0}")]
+	NotReferencableType(String),
+	#[error("unsupported: {0}")]
+	Unsupported(String),
 }
 
 pub trait VmResultExt {

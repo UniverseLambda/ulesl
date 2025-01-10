@@ -2,7 +2,10 @@ use std::{
 	cmp::Ordering,
 	collections::HashMap,
 	fmt::{Display, Write},
+	sync::Arc,
 };
+
+use parking_lot::Mutex;
 
 use crate::parser;
 
@@ -17,13 +20,11 @@ pub enum VmVariant {
 	Bool(bool),
 	Integer(i64),
 	String(String),
-	// ReadStream(Box<dyn Read>),
-	// WriteStream(Box<dyn Write>),
 	Array(Vec<VmVariant>),
 	Struct(
-		HashMap<String, VmVariant>, /* TODO: Check if having an UID for structs to differentiate them at runtime is a good idea */
+		HashMap<String, StoredValue>, /* TODO: Check if having an UID for structs to differentiate them at runtime is a good idea */
 	),
-	// Ref(Rc<VmVariant>),
+	Ref(StoredValue),
 }
 
 impl<T: IntoVariant> From<T> for VmVariant {
@@ -76,14 +77,34 @@ impl VmVariant {
 		T::try_from_variant(self)
 	}
 
+	#[inline]
 	pub fn compare(&self, other: &Self) -> Option<Ordering> {
 		match (self, other) {
 			(Self::Unit, Self::Unit) => Some(Ordering::Equal),
 			(Self::Bool(a), Self::Bool(b)) => Some(a.cmp(b)),
 			(Self::Integer(a), Self::Integer(b)) => Some(a.cmp(b)),
-			// (Self::Ref(a), Self::Ref(b)) => a.compare(b),
 			(Self::String(a), Self::String(b)) => Some(a.cmp(b)),
+			(Self::Array(a), Self::Array(b)) => a.partial_cmp(b),
+			(Self::Ref(a), Self::Ref(b)) => a.value().compare(&b.value()),
+			(Self::Ref(a), b) => a.value().compare(b),
+			(a, Self::Ref(b)) => a.compare(&b.value()),
 			_ => None,
+		}
+	}
+
+	#[inline]
+	pub fn consume_reference(self) -> Self {
+		match self {
+			VmVariant::Ref(stored_value) => stored_value.value(),
+			v => v,
+		}
+	}
+
+	#[inline]
+	pub fn clone_deref(&self) -> Self {
+		match self {
+			VmVariant::Ref(stored_value) => stored_value.value(),
+			v => v.clone(),
 		}
 	}
 }
@@ -96,13 +117,7 @@ impl PartialEq for VmVariant {
 
 impl PartialOrd for VmVariant {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		self.compare(other).and_then(|v| {
-			if let Ordering::Equal = v {
-				None
-			} else {
-				Some(v)
-			}
-		})
+		self.compare(other)
 	}
 }
 
@@ -115,7 +130,7 @@ impl VmTypable for VmVariant {
 			VmVariant::String(_) => VmType::String,
 			VmVariant::Array(_) => VmType::Array,
 			VmVariant::Struct(_) => VmType::Struct,
-			// VmVariant::Ref(_) => todo!(),
+			VmVariant::Ref(sub) => sub.get_typeinfo(),
 		}
 	}
 }
@@ -131,6 +146,7 @@ impl From<parser::types::Expr> for VmVariant {
 			parser::types::Expr::Identifier(_) => unimplemented!(),
 			parser::types::Expr::FuncCall(_) => unimplemented!(),
 			parser::types::Expr::Binary(_) => unimplemented!(),
+			parser::types::Expr::Member(_) => unimplemented!(),
 		}
 	}
 }
@@ -178,7 +194,8 @@ impl Display for VmVariant {
 				}
 
 				f.write_str(" }")
-			} // VmVariant::Ref(v) => v.fmt(f),
+			}
+			VmVariant::Ref(v) => v.fmt(f),
 		}
 	}
 }
@@ -353,3 +370,54 @@ impl_try_from_variant! {
 // 		VmType::String
 // 	}
 // }
+
+#[derive(Clone, Debug)]
+pub struct StoredValue(Arc<Mutex<VmVariant>>);
+
+impl StoredValue {
+	#[inline]
+	pub fn new(value: VmVariant) -> Self {
+		Self(Arc::new(Mutex::new(value)))
+	}
+
+	pub fn value(&self) -> VmVariant {
+		self.0.lock().clone()
+	}
+
+	pub fn set_value(&self, value: VmVariant) {
+		*self.0.lock() = value;
+	}
+}
+
+impl IntoVariant for StoredValue {
+	#[inline]
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Ref(self)
+	}
+}
+
+impl IntoVariant for &StoredValue {
+	#[inline]
+	fn into_variant(self) -> VmVariant {
+		VmVariant::Ref(self.clone())
+	}
+}
+
+impl VmTypable for StoredValue {
+	#[inline]
+	fn get_typeinfo(&self) -> VmType {
+		self.0.lock().get_typeinfo()
+	}
+}
+
+impl Display for StoredValue {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.0.lock().fmt(f)
+	}
+}
+
+impl From<VmVariant> for StoredValue {
+	fn from(value: VmVariant) -> Self {
+		Self::new(value)
+	}
+}

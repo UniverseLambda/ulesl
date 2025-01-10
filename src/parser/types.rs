@@ -31,7 +31,7 @@ pub struct IfStatement {
 
 #[derive(Debug, Clone)]
 pub struct FuncCallExpr {
-	pub name: String,
+	pub func_expr: Box<Expr>,
 	pub args: Vec<Expr>,
 }
 
@@ -105,8 +105,14 @@ pub enum Comparison {
 }
 
 #[derive(Debug, Clone)]
-pub struct VarAssign {
+pub struct VarDecl {
 	pub name: String,
+	pub val: Expr,
+}
+
+#[derive(Debug, Clone)]
+pub struct Assign {
+	pub target: Expr,
 	pub val: Expr,
 }
 
@@ -131,6 +137,12 @@ pub struct StructInstanceExpr {
 }
 
 #[derive(Debug, Clone)]
+pub struct MemberExpr {
+	pub source: Box<Expr>,
+	pub member_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct StatementBlock {
 	pub statements: Vec<LocatedType<ParsedHighLevel>>,
 	// pub ret_type: VmType,
@@ -146,15 +158,25 @@ pub enum Expr {
 	Array(ArrayExpr),
 	Binary(BinaryExpr),
 	StructInstance(StructInstanceExpr),
+	Member(MemberExpr),
+}
+
+impl Expr {
+	pub fn is_assignable(&self) -> bool {
+		match self {
+			Self::Identifier(_) | Self::Member(_) => true,
+			_ => false,
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
 pub enum ParsedHighLevel {
 	Noop,
-	VarDecl(VarAssign),
-	VarSet(VarAssign),
+	VarDecl(VarDecl),
+	Assign(Assign),
 	FuncDecl(FuncDecl),
-	FuncCall(FuncCallExpr),
 	If(IfStatement),
 	StructDecl(StructDecl),
+	ExprStatement(Expr),
 }

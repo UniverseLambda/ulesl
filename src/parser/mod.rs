@@ -46,7 +46,7 @@ impl<T: Read> Parser<T> {
 
 		let high_level = if let TokenType::Keyword = &token.token_type {
 			match token.content.as_str() {
-				"let" => ParsedHighLevel::VarDecl(self.parse_var_decl_or_assign()?),
+				"let" => ParsedHighLevel::VarDecl(self.parse_var_decl()?),
 				"fn" => ParsedHighLevel::FuncDecl(self.parse_func_decl()?),
 				"if" => ParsedHighLevel::If(self.parse_if_statement()?),
 				"struct" => ParsedHighLevel::StructDecl(self.parse_struct_decl()?),
@@ -62,33 +62,34 @@ impl<T: Read> Parser<T> {
 
 			ParsedHighLevel::Noop
 		} else {
-			self.advance_token()?;
+			// We start by an Expr (so an Identifier)
+			let expr = self.parse_expr()?;
 
-			let disc_tk = self.peek_or_fail()?;
+			let mut end_tk = self.next_or_fail()?;
 
-			self.expect_token_type(&disc_tk, TokenType::Operator)?;
+			let assign_expr = if end_tk.content == "=" {
+				let assign_expr = self.parse_expr()?;
 
-			match disc_tk.content.as_str() {
-				"(" => {
-					self.advance_token()?;
+				end_tk = self.next_or_fail()?;
 
-					let args = self.parse_expr_list(")")?;
+				Some(assign_expr)
+			} else {
+				None
+			};
 
-					let end_tk = self.next_or_fail()?;
-					self.expect_token(&end_tk, TokenType::Operator, ";")?;
+			self.expect_token(&end_tk, TokenType::Operator, ";")?;
 
-					ParsedHighLevel::FuncCall(FuncCallExpr {
-						name: token.content,
-						args,
-					})
-				}
-				"=" => {
-					self.retain_token();
-					ParsedHighLevel::VarSet(self.parse_var_decl_or_assign()?)
-				}
-				_ => self.unexpected_token(disc_tk, Some("( or =".to_string()))?,
+			if let Some(assign_expr) = assign_expr {
+				ParsedHighLevel::Assign(Assign {
+					target: expr,
+					val: assign_expr,
+				})
+			} else {
+				ParsedHighLevel::ExprStatement(expr)
 			}
 		};
+
+		// TODO: Implement Expr as first occuring
 
 		Ok(Some(LocatedType::new(high_level, location)))
 	}
@@ -123,14 +124,11 @@ impl<T: Read> Parser<T> {
 		})
 	}
 
-	fn parse_var_decl_or_assign(&mut self) -> Result<VarAssign> {
+	fn parse_var_decl(&mut self) -> Result<VarDecl> {
 		let next_tk = self.next_or_fail()?;
+		self.expect_token(&next_tk, TokenType::Keyword, "let")?;
 
-		let name_tk = if next_tk.content == "let" {
-			self.next_or_fail()?
-		} else {
-			next_tk
-		};
+		let name_tk = self.next_or_fail()?;
 
 		self.expect_token_type(&name_tk, TokenType::Identifier)?;
 
@@ -143,7 +141,7 @@ impl<T: Read> Parser<T> {
 		let end_tk = self.next_or_fail()?;
 		self.expect_token(&end_tk, TokenType::Operator, ";")?;
 
-		Ok(VarAssign {
+		Ok(VarDecl {
 			name: name_tk.content,
 			val,
 		})
@@ -185,6 +183,47 @@ impl<T: Read> Parser<T> {
 	}
 
 	fn parse_expr(&mut self) -> Result<Expr> {
+		let mut last_expr = self.parse_mono_expr()?;
+
+		loop {
+			let peeked_token = self.peek_or_fail()?;
+			if peeked_token.content == ";"
+				|| peeked_token.content == ","
+				|| peeked_token.content == "{"
+				|| peeked_token.content == "}"
+				|| peeked_token.content == "]"
+				|| peeked_token.content == ")"
+				|| peeked_token.content == "="
+			{
+				return Ok(last_expr);
+			}
+
+			last_expr = self.parse_globing_expr(last_expr)?;
+		}
+	}
+
+	fn parse_globing_expr(&mut self, left_expr: Expr) -> Result<Expr> {
+		let peeked_token = self.peek_or_fail()?;
+
+		self.expect_token_type(&peeked_token, TokenType::Operator)?;
+
+		match peeked_token.content.as_str() {
+			"(" => {
+				self.advance_token()?;
+
+				let args = self.parse_expr_list(")")?;
+
+				Ok(Expr::FuncCall(FuncCallExpr {
+					func_expr: Box::new(left_expr),
+					args,
+				}))
+			}
+			v if is_binary_expr_operator(v) => self.parse_binary_expr(left_expr),
+			_ => return self.unexpected_token(peeked_token, Some("expression".to_string())),
+		}
+	}
+
+	fn parse_mono_expr(&mut self) -> Result<Expr> {
 		// TODO: extended expressions (binary, bit manipulation, etc...)
 
 		if let TokenType::Identifier = self.peek_or_fail()?.token_type {
@@ -208,32 +247,16 @@ impl<T: Read> Parser<T> {
 			_ => return self.unexpected_token(expr_start, Some("expression".to_string())),
 		};
 
-		if let Some(token) = self.peek_token()? {
-			if is_binary_expr_operator(&token.content) {
-				return self.parse_binary_expr(first_expr);
-			}
-		}
-
 		Ok(first_expr)
 	}
 
 	fn parse_branch_identifier_expr(&mut self) -> Result<Expr> {
 		let identifier = self.next_or_fail()?;
-
 		let peeked = self.peek_or_fail()?;
 
 		// TODO: implement array access
 
-		if peeked.content == "(" {
-			self.advance_token()?;
-
-			let args = self.parse_expr_list(")")?;
-
-			Ok(Expr::FuncCall(FuncCallExpr {
-				name: identifier.content,
-				args,
-			}))
-		} else if peeked.content == "{" {
+		if peeked.content == "{" {
 			self.parse_struct_instanciation_expr(identifier.content)
 		} else {
 			Ok(Expr::Identifier(identifier.content))

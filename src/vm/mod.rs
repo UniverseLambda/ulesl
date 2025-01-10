@@ -7,9 +7,9 @@ use std::{
 use crate::{
 	common::Location,
 	parser::types::{
-		ArrayExpr, BinaryExpr, BinaryOp, BooleanOperation, Comparison, Expr, FuncCallExpr,
-		FuncDecl, IfStatement, LocatedType, NumericalOperation, ParsedHighLevel, StructDecl,
-		StructInstanceExpr, VarAssign,
+		ArrayExpr, Assign, BinaryExpr, BinaryOp, BooleanOperation, Comparison, Expr, FuncCallExpr,
+		FuncDecl, IfStatement, LocatedType, MemberExpr, NumericalOperation, ParsedHighLevel,
+		StructDecl, StructInstanceExpr, VarDecl,
 	},
 };
 
@@ -25,6 +25,7 @@ mod variant;
 
 use error::{VmErrorType, VmResult};
 use types::VmTypable;
+use variant::StoredValue;
 
 type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> VmResult<VmVariant>;
 
@@ -42,7 +43,7 @@ struct StructData {
 }
 
 struct Scope {
-	variables: HashMap<String, VmVariant>,
+	variables: HashMap<String, StoredValue>,
 	functions: HashMap<String, Rc<FunctionData>>,
 	structs: HashMap<String, Rc<StructData>>,
 	caller: Location,
@@ -119,19 +120,15 @@ impl Vm {
 		let package = located_package.inner;
 
 		let ret = match package {
-			ParsedHighLevel::VarDecl(assign_data) => self
-				.eval_var_assign(assign_data, Self::new_variable)
-				.map(|_| Option::None)?,
-			ParsedHighLevel::VarSet(assign_data) => self
-				.eval_var_assign(assign_data, Self::set_variable)
-				.map(|_| Option::None)?,
-			ParsedHighLevel::FuncCall(call_data) => self.eval_func_call(call_data).map(|v| {
-				if self.stack_scope.is_none() {
-					Option::Some(v)
-				} else {
-					Option::None
-				}
-			})?,
+			ParsedHighLevel::VarDecl(assign_data) => {
+				self.eval_var_decl(assign_data).map(|_| Option::None)?
+			}
+			ParsedHighLevel::Assign(assign_data) => {
+				self.eval_assign(assign_data).map(|_| Option::None)?
+			}
+			// ParsedHighLevel::VarSet(assign_data) => self
+			// 	.eval_var_assign(assign_data, Self::set_variable)
+			// 	.map(|_| Option::None)?,
 			ParsedHighLevel::StructDecl(struct_decl) => {
 				self.eval_struct_decl(struct_decl).map(|_| None)?
 			}
@@ -141,16 +138,48 @@ impl Vm {
 			ParsedHighLevel::If(if_statement) => {
 				self.eval_if(if_statement).map(|_| Option::None)?
 			}
+			ParsedHighLevel::ExprStatement(expr) => self.eval_expr(expr).map(|v| {
+				if self.stack_scope.is_none() {
+					Option::Some(v)
+				} else {
+					Option::None
+				}
+			})?,
 			ParsedHighLevel::Noop => Option::None,
 		};
 
 		Ok(ret)
 	}
 
-	fn eval_var_assign(&mut self, var_assign: VarAssign, vmfunc: VmFuncVarAssign) -> VmResult<()> {
-		let evaluated_val = self.eval_expr(var_assign.val)?;
+	fn eval_var_decl(&mut self, var_decl: VarDecl) -> VmResult<()> {
+		let value = self.eval_expr(var_decl.val)?;
 
-		vmfunc(self, var_assign.name, evaluated_val)
+		let scope = if let Some(scope) = self.stack_scope.as_mut() {
+			scope
+		} else {
+			&mut self.global_scope
+		};
+
+		if !self.allow_var_shadowing && scope.variables.contains_key(&var_decl.name) {
+			Err(VmError::var_name_dup(var_decl.name))
+		} else {
+			// println!("[VM DEBUG] New variable: \"{}\" (value: {:?})", var_decl.name, vm_value);
+
+			scope
+				.variables
+				.insert(var_decl.name, StoredValue::new(value));
+
+			Ok(())
+		}
+	}
+
+	fn eval_assign(&mut self, var_assign: Assign) -> VmResult<()> {
+		let target = self.eval_ref(var_assign.target)?;
+		let value = self.eval_expr(var_assign.val)?;
+
+		target.set_value(value);
+
+		Ok(())
 	}
 
 	fn eval_func_call(&mut self, mut func_call_expr: FuncCallExpr) -> VmResult<VmVariant> {
@@ -160,7 +189,16 @@ impl Vm {
 			params.push(self.eval_expr(arg_expr)?);
 		}
 
-		self.call_func(func_call_expr.name, params)
+		let func_name = match *func_call_expr.func_expr {
+			Expr::Identifier(ident) => ident,
+			v => {
+				return Err(VmError::unsupported(
+					"function expression, please use the function name".to_string(),
+				))
+			}
+		};
+
+		self.call_func(func_name, params)
 	}
 
 	fn eval_struct_decl(&mut self, decl: StructDecl) -> VmResult<()> {
@@ -232,7 +270,7 @@ impl Vm {
 				return Err(VmError::missing_struct_member(field));
 			};
 
-			members.insert(field, self.eval_expr(field_expr)?);
+			members.insert(field, StoredValue::new(self.eval_expr(field_expr)?));
 		}
 
 		if let Some(field) = struct_instance.vars_init.iter().next() {
@@ -252,7 +290,18 @@ impl Vm {
 			Expr::Array(array_data) => self.eval_array(array_data)?,
 			Expr::Binary(compare_data) => self.eval_binary_expr(compare_data)?,
 			Expr::StructInstance(struct_instance) => self.eval_struct_instance(struct_instance)?,
+			Expr::Member(member_data) => self.eval_member(member_data)?,
 		})
+	}
+
+	fn eval_ref(&mut self, expr: Expr) -> VmResult<StoredValue> {
+		match self.eval_expr(expr)? {
+			VmVariant::Ref(r) => Ok(r),
+			v => Err(VmError::invalid_value_type(
+				"reference".to_string(),
+				v.get_typeinfo().to_string(),
+			)),
+		}
 	}
 
 	fn eval_binary_expr(&mut self, expr: BinaryExpr) -> VmResult<VmVariant> {
@@ -271,6 +320,10 @@ impl Vm {
 				self.eval_numerical_op(op, left, right)
 			}
 		}
+	}
+
+	fn eval_member(&mut self, expr: MemberExpr) -> VmResult<VmVariant> {
+		todo!()
 	}
 
 	fn eval_comparison(
@@ -334,52 +387,6 @@ impl Vm {
 		}))
 	}
 
-	pub fn new_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {
-		let scope = if let Some(scope) = self.stack_scope.as_mut() {
-			scope
-		} else {
-			&mut self.global_scope
-		};
-
-		if !self.allow_var_shadowing && scope.variables.contains_key(&var_name) {
-			Err(VmError::var_name_dup(var_name))
-		} else {
-			let vm_value: VmVariant = value.into();
-
-			// println!("[VM DEBUG] New variable: \"{}\" (value: {:?})", var_name, vm_value);
-
-			scope.variables.insert(var_name, vm_value);
-
-			Ok(())
-		}
-	}
-
-	pub fn set_variable<T: Into<VmVariant>>(&mut self, var_name: String, value: T) -> VmResult<()> {
-		if !self.allow_implicit_var
-			&& self
-				.stack_scope
-				.as_ref()
-				.map_or(false, |scope| scope.variables.contains_key(&var_name))
-			&& !self.global_scope.variables.contains_key(&var_name)
-		{
-			return Err(VmError::unknown_identifier(var_name));
-		}
-
-		let vm_value: VmVariant = value.into();
-
-		// println!("[VM DEBUG] Variable update: \"{}\" (new value: {:?})", var_name, vm_value);
-
-		if let Some(scope) = self.stack_scope.as_mut() {
-			scope
-		} else {
-			&mut self.global_scope
-		}
-		.variables
-		.insert(var_name, vm_value);
-
-		Ok(())
-	}
-
 	fn get_struct_data(&self, struct_name: &String) -> VmResult<Rc<StructData>> {
 		let scope = self.get_scope();
 
@@ -395,10 +402,10 @@ impl Vm {
 	pub fn get_variable(&self, var_name: &String) -> VmResult<VmVariant> {
 		let scope = self.get_scope();
 
-		// TODO: Also check global scope if stack_scope
+		// TODO: Also check global scope if stack_scope does not have it
 
 		if let Some(val) = scope.variables.get(var_name) {
-			Ok(val.clone())
+			Ok(val.into_variant())
 		} else {
 			Err(VmError::unknown_identifier(var_name.clone()))
 		}
@@ -449,7 +456,7 @@ impl Vm {
 					.as_mut()
 					.unwrap()
 					.variables
-					.insert(name.clone(), value);
+					.insert(name.clone(), StoredValue::new(value));
 			}
 
 			// zipped.unzip() when I'll implement default values
