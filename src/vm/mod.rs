@@ -29,8 +29,6 @@ use variant::StoredValue;
 
 type Builtin = fn(&mut Vm, String, Vec<VmVariant>) -> VmResult<VmVariant>;
 
-type VmFuncVarAssign<T = VmVariant> = fn(&mut Vm, String, T) -> VmResult<()>;
-
 struct FunctionData {
 	packages: Vec<LocatedType<ParsedHighLevel>>,
 	args: Vec<String>,
@@ -191,7 +189,7 @@ impl Vm {
 
 		let func_name = match *func_call_expr.func_expr {
 			Expr::Identifier(ident) => ident,
-			v => {
+			_ => {
 				return Err(VmError::unsupported(
 					"function expression, please use the function name".to_string(),
 				))
@@ -322,9 +320,7 @@ impl Vm {
 		}
 	}
 
-	fn eval_member(&mut self, expr: MemberExpr) -> VmResult<VmVariant> {
-		todo!()
-	}
+	fn eval_member(&mut self, expr: MemberExpr) -> VmResult<VmVariant> {}
 
 	fn eval_comparison(
 		&mut self,
